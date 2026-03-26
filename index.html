@@ -758,8 +758,10 @@ function Diamond({players, color, dark}) {
 }
 
 function Modal({game, onClose, closeRef, dark, D}) {
-  const [lt,setLt] = useState("away");
+  const [lt, setLt] = useState("away");
   const [closing, setClosing] = useState(false);
+  const [memo, setMemo] = useState(()=>localStorage.getItem(`memo_${game.date}_${game.away}_${game.home}`) || "");
+  const [memoSaved, setMemoSaved] = useState(false);
   const touchStartY = React.useRef(null);
 
   const handleClose = () => {
@@ -767,59 +769,79 @@ function Modal({game, onClose, closeRef, dark, D}) {
     document.body.style.overflow = '';
     setTimeout(() => onClose(), 280);
   };
-  useEffect(()=>{
+
+  useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return ()=>{ document.body.style.overflow = ''; };
-  },[]);
-  useEffect(()=>{ if(closeRef) closeRef.current = handleClose; return ()=>{ if(closeRef) closeRef.current=null; }; },[closing]);
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    if (closeRef) closeRef.current = handleClose;
+    return () => { if (closeRef) closeRef.current = null; };
+  }, [closing]);
 
   const onTouchStart = e => { touchStartY.current = e.touches[0].clientY; };
   const onTouchMove = e => {
-    if(touchStartY.current === null) return;
+    if (touchStartY.current === null) return;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if(dy > 0) e.preventDefault();
+    if (dy > 0) e.preventDefault();
   };
   const onTouchEnd = e => {
-    if(touchStartY.current === null) return;
+    if (touchStartY.current === null) return;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
     touchStartY.current = null;
-    if(dy > 60) handleClose();
+    if (dy > 60) handleClose();
   };
-  const aw = T[game.away]||{name:game.away,color:"#888",emoji:"⚾"};
-  const hw = T[game.home]||{name:game.home,color:"#888",emoji:"⚾"};
-  const isSch = !game.status || game.status==="SCHEDULED";
+
+  const saveMemo = (val) => {
+    setMemo(val);
+    localStorage.setItem(`memo_${game.date}_${game.away}_${game.home}`, val);
+    setMemoSaved(true);
+    setTimeout(() => setMemoSaved(false), 1500);
+  };
+
+  const aw = T[game.away] || {name:game.away, color:"#888", emoji:"⚾"};
+  const hw = T[game.home] || {name:game.home, color:"#888", emoji:"⚾"};
+  const isSch = !game.status || game.status === "SCHEDULED";
   const hasLU = !!game.lineup;
-  const cur = lt==="away"?(game.lineup?.away||[]):(game.lineup?.home||[]);
-  const ct = lt==="away"?aw:hw;
+  const cur = lt === "away" ? (game.lineup?.away || []) : (game.lineup?.home || []);
+  const ct = lt === "away" ? aw : hw;
   const emp = Array(9).fill(-1);
-  const as = game.awayInnings||emp; const hs = game.homeInnings||emp;
-  const at = as.reduce((a,b)=>a+(b>0?b:0),0); const ht = hs.reduce((a,b)=>a+(b>0?b:0),0);
+  const as = game.awayInnings || emp;
+  const hs = game.homeInnings || emp;
+  const at = as.reduce((a,b) => a + (b > 0 ? b : 0), 0);
+  const ht = hs.reduce((a,b) => a + (b > 0 ? b : 0), 0);
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,background:dark?"rgba(0,0,0,0.8)":"rgba(0,0,0,0.4)",backdropFilter:"blur(6px)",
       display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s"}} onClick={handleClose}>
       <div style={{width:"100%",maxWidth:"520px",background:dark?"#0F1525":"#ffffff",border:"1px solid rgba(255,255,255,0.1)",
-        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",animation:closing?"slideDown 0.28s ease forwards":"slideUp 0.3s ease",paddingBottom:"28px"}}
+        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",
+        animation:closing?"slideDown 0.28s ease forwards":"slideUp 0.3s ease",paddingBottom:"28px"}}
         onClick={e=>e.stopPropagation()}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}>
+
+        {/* 핸들 */}
         <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}>
           <div style={{width:"34px",height:"4px",borderRadius:"2px",background:dark?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.25)"}}/>
         </div>
+
         {/* 헤더 */}
         <div style={{padding:"10px 18px 14px",borderBottom:`1px solid ${dark?"rgba(255,255,255,0.07)":"rgba(0,0,0,0.08)"}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
             <span style={{fontSize:"11px",fontWeight:"700",color:"#FFB300",fontFamily:"'Noto Sans KR',sans-serif"}}>
               {game.time} 시작 · 📍 {game.stad}
             </span>
-            <button onClick={handleClose} style={{background:dark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)",border:"none",color:dark?"rgba(255,255,255,0.6)":"rgba(0,0,0,0.5)",
-              borderRadius:"50%",width:"28px",height:"28px",fontSize:"16px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            <button onClick={handleClose} style={{background:dark?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)",border:"none",
+              color:dark?"rgba(255,255,255,0.6)":"rgba(0,0,0,0.5)",borderRadius:"50%",width:"28px",height:"28px",
+              fontSize:"16px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:"9px",flex:1}}>
-              <div style={{width:"48px",height:"48px",background:"transparent",border:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>
-              {aw.img?<img src={aw.img} style={{width:"100%",height:"100%",objectFit:"contain"}}/>:<span>{aw.emoji}</span>}
+              <div style={{width:"48px",height:"48px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {aw.img ? <img src={aw.img} style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:"22px"}}>{aw.emoji}</span>}
               </div>
               <div>
                 <div style={{fontSize:"13px",fontWeight:"800",fontFamily:"'Noto Sans KR',sans-serif",color:game.away==="KIA"?"#ff6b6b":dark?"#fff":D.text}}>{aw.name}</div>
@@ -830,15 +852,15 @@ function Modal({game, onClose, closeRef, dark, D}) {
               {isSch
                 ? <div style={{fontSize:"16px",fontWeight:"800",color:"#FFB300"}}>VS</div>
                 : <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                    <span style={{fontSize:"28px",fontWeight:"900"}}>{game.awayScore??0}</span>
+                    <span style={{fontSize:"28px",fontWeight:"900",color:D.text}}>{game.awayScore ?? 0}</span>
                     <span style={{color:"rgba(255,255,255,0.2)"}}>:</span>
-                    <span style={{fontSize:"28px",fontWeight:"900"}}>{game.homeScore??0}</span>
+                    <span style={{fontSize:"28px",fontWeight:"900",color:D.text}}>{game.homeScore ?? 0}</span>
                   </div>
               }
             </div>
             <div style={{display:"flex",alignItems:"center",gap:"9px",flex:1,flexDirection:"row-reverse"}}>
-              <div style={{width:"48px",height:"48px",background:"transparent",border:"none",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"22px"}}>
-              {hw.img?<img src={hw.img} style={{width:"100%",height:"100%",objectFit:"contain"}}/>:<span>{hw.emoji}</span>}
+              <div style={{width:"48px",height:"48px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {hw.img ? <img src={hw.img} style={{width:"100%",height:"100%",objectFit:"contain"}}/> : <span style={{fontSize:"22px"}}>{hw.emoji}</span>}
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:"13px",fontWeight:"800",fontFamily:"'Noto Sans KR',sans-serif",color:game.home==="KIA"?"#ff6b6b":dark?"#fff":D.text}}>{hw.name}</div>
@@ -848,14 +870,16 @@ function Modal({game, onClose, closeRef, dark, D}) {
           </div>
         </div>
 
+        {/* 본문 */}
         <div style={{padding:"18px 18px 0"}}>
+
           {/* 이닝별 스코어 */}
           <div style={{marginBottom:"18px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px"}}>
               <span style={{fontSize:"15px"}}>📊</span>
               <span style={{fontSize:"13px",fontWeight:"800",fontFamily:"'Noto Sans KR',sans-serif"}}>이닝별 스코어</span>
             </div>
-            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"12px",padding:"4px 4px"}}>
+            <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"12px",padding:"4px"}}>
               {isSch
                 ? <div style={{textAlign:"center",padding:"16px",color:dark?"rgba(255,255,255,0.25)":"rgba(0,0,0,0.4)",fontSize:"12px",fontFamily:"'Noto Sans KR',sans-serif"}}>
                     경기 예정 · 경기 후 스코어가 표시됩니다
@@ -864,13 +888,15 @@ function Modal({game, onClose, closeRef, dark, D}) {
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px",minWidth:"300px"}}>
                       <thead>
                         <tr>
-                          <td style={{padding:"6px 6px",color:dark?"rgba(255,255,255,0.3)":"rgba(0,0,0,0.45)",width:"55px"}}></td>
-                          {[1,2,3,4,5,6,7,8,9].map(i=><td key={i} style={{textAlign:"center",padding:"6px 3px",color:"rgba(255,255,255,0.4)",fontWeight:"700"}}>{i}</td>)}
+                          <td style={{padding:"6px",color:dark?"rgba(255,255,255,0.3)":"rgba(0,0,0,0.45)",width:"55px"}}></td>
+                          {[1,2,3,4,5,6,7,8,9].map(i=>(
+                            <td key={i} style={{textAlign:"center",padding:"6px 3px",color:"rgba(255,255,255,0.4)",fontWeight:"700"}}>{i}</td>
+                          ))}
                           <td style={{textAlign:"center",padding:"6px 5px",color:dark?"rgba(255,255,255,0.6)":"rgba(0,0,0,0.7)",fontWeight:"900",fontSize:"13px"}}>R</td>
                         </tr>
                       </thead>
                       <tbody>
-                        {[[game.away,as,at,aw.color],[game.home,hs,ht,hw.color]].map(([nm,sc,tot,cl],ri)=>(
+                        {[[game.away, as, at, aw.color],[game.home, hs, ht, hw.color]].map(([nm,sc,tot,cl],ri)=>(
                           <tr key={ri} style={{background:ri===0?"rgba(255,255,255,0.03)":"transparent"}}>
                             <td style={{padding:"8px 6px",fontFamily:"'Noto Sans KR',sans-serif",fontSize:"11px",fontWeight:"700",color:"rgba(255,255,255,0.7)",borderTop:"1px solid rgba(255,255,255,0.07)"}}>
                               <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
@@ -878,11 +904,14 @@ function Modal({game, onClose, closeRef, dark, D}) {
                                 {nm}
                               </div>
                             </td>
-                            {sc.map((s,i)=><td key={i} style={{textAlign:"center",padding:"8px 3px",color:s>0?"#fff":dark?"rgba(255,255,255,0.22)":"rgba(0,0,0,0.35)",fontWeight:s>0?"700":"400",borderTop:"1px solid rgba(255,255,255,0.07)"}}>
-                              {s===-1?<span style={{color:dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.08)"}}>-</span>:s}
-                            </td>)}
+                            {sc.map((s,i)=>(
+                              <td key={i} style={{textAlign:"center",padding:"8px 3px",color:s>0?"#fff":dark?"rgba(255,255,255,0.22)":"rgba(0,0,0,0.35)",fontWeight:s>0?"700":"400",borderTop:"1px solid rgba(255,255,255,0.07)"}}>
+                                {s===-1 ? <span style={{color:dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.08)"}}>-</span> : s}
+                              </td>
+                            ))}
                             <td style={{textAlign:"center",padding:"8px 5px",fontWeight:"900",fontSize:"14px",
-                              color:tot===Math.max(at,ht)&&at!==ht?cl:dark?"rgba(255,255,255,0.85)":"rgba(0,0,0,0.85)",borderTop:"1px solid rgba(255,255,255,0.07)"}}>{tot}</td>
+                              color:tot===Math.max(at,ht)&&at!==ht?cl:dark?"rgba(255,255,255,0.85)":"rgba(0,0,0,0.85)",
+                              borderTop:"1px solid rgba(255,255,255,0.07)"}}>{tot}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -893,7 +922,7 @@ function Modal({game, onClose, closeRef, dark, D}) {
           </div>
 
           {/* 선발 라인업 */}
-          <div>
+          <div style={{marginBottom:"18px"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px"}}>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                 <span style={{fontSize:"15px"}}>🧢</span>
@@ -936,11 +965,39 @@ function Modal({game, onClose, closeRef, dark, D}) {
                 </div>
             }
           </div>
+
+          {/* 메모 */}
+          <div style={{marginBottom:"8px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                <span style={{fontSize:"15px"}}>📝</span>
+                <span style={{fontSize:"13px",fontWeight:"800",fontFamily:"'Noto Sans KR',sans-serif"}}>내 메모</span>
+              </div>
+              {memoSaved && <span style={{fontSize:"11px",color:"#00C864",fontFamily:"'Noto Sans KR',sans-serif",fontWeight:"700"}}>저장됨 ✓</span>}
+            </div>
+            <textarea
+              value={memo}
+              onChange={e=>saveMemo(e.target.value)}
+              placeholder="이 경기에 대한 생각이나 메모를 남겨보세요 ✍️"
+              style={{
+                width:"100%",minHeight:"90px",padding:"12px",
+                background:dark?"rgba(255,255,255,0.05)":"rgba(0,0,0,0.04)",
+                border:`1px solid ${dark?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.1)"}`,
+                borderRadius:"12px",color:D.text,fontSize:"13px",
+                fontFamily:"'Noto Sans KR',sans-serif",lineHeight:"1.6",
+                resize:"none",outline:"none",
+              }}
+            />
+          </div>
+
         </div>
       </div>
     </div>
+  </div>
+  </div>
   );
 }
+
 
 function CalendarTab({onSelect, dark, D}) {
   const [yr,setYr] = useState(2026);
