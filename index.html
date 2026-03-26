@@ -18,7 +18,16 @@
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
     @keyframes slideUp{from{transform:translateY(40px);opacity:0}to{transform:translateY(0);opacity:1}}
     button{cursor:pointer;-webkit-appearance:none}
-  </style>
+  
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  @keyframes slideDown {
+    from { transform: translateY(0);    opacity: 1; }
+    to   { transform: translateY(100%); opacity: 0; }
+  }
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -747,8 +756,14 @@ function Diamond({players, color}) {
   );
 }
 
-function Modal({game, onClose}) {
+function Modal({game, onClose, closeRef}) {
   const [lt,setLt] = useState("away");
+  const [closing, setClosing] = useState(false);
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(() => onClose(), 280);
+  };
+  useEffect(()=>{ if(closeRef) closeRef.current = handleClose; return ()=>{ if(closeRef) closeRef.current=null; }; },[closing]);
   const aw = T[game.away]||{name:game.away,color:"#888",emoji:"⚾"};
   const hw = T[game.home]||{name:game.home,color:"#888",emoji:"⚾"};
   const isSch = !game.status || game.status==="SCHEDULED";
@@ -761,9 +776,9 @@ function Modal({game, onClose}) {
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.8)",backdropFilter:"blur(6px)",
-      display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s"}} onClick={onClose}>
+      display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s"}} onClick={handleClose}>
       <div style={{width:"100%",maxWidth:"520px",background:"#0F1525",border:"1px solid rgba(255,255,255,0.1)",
-        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",paddingBottom:"28px",animation:"slideUp 0.3s"}}
+        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",animation:closing?"slideDown 0.28s ease forwards":"slideUp 0.3s ease",paddingBottom:"28px",animation:"slideUp 0.3s"}}
         onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}>
           <div style={{width:"34px",height:"4px",borderRadius:"2px",background:"rgba(255,255,255,0.15)"}}/>
@@ -774,7 +789,7 @@ function Modal({game, onClose}) {
             <span style={{fontSize:"11px",fontWeight:"700",color:"#FFB300",fontFamily:"'Noto Sans KR',sans-serif"}}>
               {game.time} 시작 · 📍 {game.stad}
             </span>
-            <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.6)",
+            <button onClick={handleClose} style={{background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.6)",
               borderRadius:"50%",width:"28px",height:"28px",fontSize:"16px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1083,8 +1098,9 @@ function App() {
     setGame(g);
     history.pushState({modal:true}, "");
   };
+  const closeModal = React.useRef(null);
   useEffect(()=>{
-    const onPop = () => { setGame(null); };
+    const onPop = () => { if(closeModal.current) closeModal.current(); else setGame(null); };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -1111,7 +1127,7 @@ function App() {
 
   return (
     <div style={{minHeight:"100vh",background:"#0A0E1A",fontFamily:"'Inter',sans-serif",color:"#fff"}}>
-      {game&&<Modal game={game} onClose={()=>setGame(null)}/>}
+      {game&&<Modal game={game} onClose={()=>setGame(null)} closeRef={closeModal}/>}
 
       {/* 헤더 */}
       <div style={{background:"linear-gradient(180deg,#111827 0%,transparent 100%)",padding:"18px 16px 12px"}}>
