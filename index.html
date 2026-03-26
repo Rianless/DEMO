@@ -1079,17 +1079,23 @@ function App() {
   const TABS=[{id:"calendar",label:"📅 일정"},{id:"standings",label:"🏆 순위"},{id:"leaders",label:"⭐ 주목"}];
   const TAB_ORDER=["calendar","standings","leaders"];
 
-  // 스와이프 핸들러
+  // 스와이프 핸들러 (좌우만, 상하 스크롤 방해 안함)
   const touchStart = React.useRef(null);
-  const handleTouchStart = (e) => { touchStart.current = e.touches[0].clientX; };
+  const handleTouchStart = (e) => {
+    touchStart.current = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+  };
   const handleTouchEnd = (e) => {
-    if(touchStart.current === null) return;
-    const diff = touchStart.current - e.changedTouches[0].clientX;
-    if(Math.abs(diff) < 50) return; // 50px 미만은 무시
-    const cur = TAB_ORDER.indexOf(tab);
-    if(diff > 0 && cur < TAB_ORDER.length-1) setTab(TAB_ORDER[cur+1]); // 왼쪽 스와이프 → 다음
-    if(diff < 0 && cur > 0) setTab(TAB_ORDER[cur-1]); // 오른쪽 스와이프 → 이전
+    if(!touchStart.current) return;
+    const dx = touchStart.current.x - e.changedTouches[0].clientX;
+    const dy = touchStart.current.y - e.changedTouches[0].clientY;
     touchStart.current = null;
+    // 상하 움직임이 좌우보다 크면 스크롤로 판단, 무시
+    if(Math.abs(dy) > Math.abs(dx)) return;
+    // 좌우 이동이 70px 미만이면 무시
+    if(Math.abs(dx) < 70) return;
+    const cur = TAB_ORDER.indexOf(tab);
+    if(dx > 0 && cur < TAB_ORDER.length-1) setTab(TAB_ORDER[cur+1]);
+    if(dx < 0 && cur > 0) setTab(TAB_ORDER[cur-1]);
   };
 
   return (
