@@ -1075,28 +1075,25 @@ function App() {
   const [tab,setTab] = useState("calendar");
   const [lcat,setLcat] = useState("batting");
   const [time,setTime] = useState(new Date());
-  const [insight,setInsight] = useState("");
-  const [loading,setLoading] = useState(false);
   const [game,setGame] = useState(null);
 
   useEffect(()=>{const t=setInterval(()=>setTime(new Date()),1000);return()=>clearInterval(t);},[]);
 
-  async function getInsight(){
-    setLoading(true);setInsight("");
-    try{
-      const r = await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{
-          role:"user",
-          content:"KBO 야구 전문 해설위원입니다. 오늘 2026년 3월 26일, KBO 개막(3/28) 이틀 전입니다. KIA 타이거즈 팬을 위해 개막 기대감 담은 프리뷰를 2~3문장으로 써주세요. KIA 첫 경기는 인천 SSG 원정, 선발 양현종 예상. 짧고 임팩트 있게!"}]})
-      });
-      const d = await r.json();
-      setInsight(d.content?.find(c=>c.type==="text")?.text||"인사이트를 불러올 수 없습니다.");
-    }catch{setInsight("오류가 발생했습니다.");}
-    setLoading(false);
-  }
-
   const TABS=[{id:"calendar",label:"📅 일정"},{id:"standings",label:"🏆 순위"},{id:"leaders",label:"⭐ 주목"}];
+  const TAB_ORDER=["calendar","standings","leaders"];
+
+  // 스와이프 핸들러
+  const touchStart = React.useRef(null);
+  const handleTouchStart = (e) => { touchStart.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if(touchStart.current === null) return;
+    const diff = touchStart.current - e.changedTouches[0].clientX;
+    if(Math.abs(diff) < 50) return; // 50px 미만은 무시
+    const cur = TAB_ORDER.indexOf(tab);
+    if(diff > 0 && cur < TAB_ORDER.length-1) setTab(TAB_ORDER[cur+1]); // 왼쪽 스와이프 → 다음
+    if(diff < 0 && cur > 0) setTab(TAB_ORDER[cur-1]); // 오른쪽 스와이프 → 이전
+    touchStart.current = null;
+  };
 
   return (
     <div style={{minHeight:"100vh",background:"#0A0E1A",fontFamily:"'Inter',sans-serif",color:"#fff"}}>
@@ -1131,25 +1128,7 @@ function App() {
       </div>
 
       {/* 본문 */}
-      <div style={{maxWidth:"600px",margin:"0 auto",padding:"14px 16px 80px"}}>
-        {/* AI 프리뷰 */}
-        <div style={{background:"linear-gradient(135deg,rgba(227,24,55,0.1),rgba(30,68,137,0.1))",
-          border:"1px solid rgba(227,24,55,0.2)",borderRadius:"12px",padding:"11px 14px",marginBottom:"14px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:insight?"7px":"0"}}>
-            <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
-              <span>✨</span>
-              <span style={{fontSize:"12px",fontWeight:"700",color:"#E31837",fontFamily:"'Noto Sans KR',sans-serif"}}>AI 개막 프리뷰</span>
-            </div>
-            <button onClick={getInsight} disabled={loading} style={{background:"rgba(227,24,55,0.2)",border:"1px solid rgba(227,24,55,0.35)",
-              color:"#fff",borderRadius:"7px",padding:"4px 10px",fontSize:"11px",fontFamily:"'Noto Sans KR',sans-serif",fontWeight:"600",opacity:loading?0.6:1}}>
-              {loading?"분석 중...":"프리뷰 보기"}
-            </button>
-          </div>
-          {insight
-            ?<p style={{fontSize:"12px",color:"rgba(255,255,255,0.8)",lineHeight:"1.7",fontFamily:"'Noto Sans KR',sans-serif",animation:"fadeIn 0.5s"}}>{insight}</p>
-            :<p style={{fontSize:"11px",color:"rgba(255,255,255,0.2)",fontFamily:"'Noto Sans KR',sans-serif"}}>버튼을 눌러 KIA 개막전 AI 프리뷰를 확인하세요 🐯</p>
-          }
-        </div>
+      <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{maxWidth:"600px",margin:"0 auto",padding:"14px 16px 80px"}}>
 
         {/* 일정 탭 */}
         {tab==="calendar"&&<CalendarTab onSelect={setGame}/>}
