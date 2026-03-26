@@ -1,6 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/mlb", "destination": "/mlb.html" },
-    { "source": "/api/mlbScores", "destination": "/api/mlbScores.js" }
-  ]
-}
