@@ -778,7 +778,7 @@ function Modal({game, onClose, closeRef}) {
     <div style={{position:"fixed",inset:0,zIndex:100,background:"rgba(0,0,0,0.8)",backdropFilter:"blur(6px)",
       display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s"}} onClick={handleClose}>
       <div style={{width:"100%",maxWidth:"520px",background:"#0F1525",border:"1px solid rgba(255,255,255,0.1)",
-        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",animation:closing?"slideDown 0.28s ease forwards":"slideUp 0.3s ease",paddingBottom:"28px",animation:"slideUp 0.3s"}}
+        borderRadius:"22px 22px 0 0",maxHeight:"92vh",overflowY:"auto",animation:closing?"slideDown 0.28s ease forwards":"slideUp 0.3s ease",paddingBottom:"28px"}}
         onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"center",padding:"10px 0 2px"}}>
           <div style={{width:"34px",height:"4px",borderRadius:"2px",background:"rgba(255,255,255,0.15)"}}/>
