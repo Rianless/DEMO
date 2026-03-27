@@ -697,6 +697,10 @@ function toggleFav(g) {
   render();
   if(state.modalGame) renderModal(D());
 }
+function toggleFavByKey(date, away, home) {
+  const g = SCH.find(s=>s.date===date&&s.away===away&&s.home===home);
+  if(g) toggleFav(g);
+}
 
 const PC = {CF:{x:50,y:8},LF:{x:18,y:20},RF:{x:82,y:20},SS:{x:34,y:44},"2B":{x:64,y:44},P:{x:50,y:54},"3B":{x:18,y:62},"1B":{x:82,y:62},C:{x:50,y:80},DH:{x:10,y:80}};
 
@@ -817,7 +821,7 @@ function renderHeader(d) {
 }
 
 function renderNav() {
-  const tabs=[{id:'cal',icon:'📅',label:'일정'},{id:'stand',icon:'🏆',label:'순위'},{id:'lead',icon:'⭐',label:'주목'},{id:'memo',icon:'📝',label:'메모'},{id:'fav',icon:'⭐',label:'즐겨찾기'}];
+  const tabs=[{id:'cal',icon:'📅',label:'일정'},{id:'stand',icon:'🏆',label:'순위'},{id:'my',icon:'🙍',label:'마이페이지'}];
   document.getElementById('nav').innerHTML = tabs.map(t =>
     `<button class="${state.tab===t.id?'active':''}" onclick="setTab('${t.id}')">
       <span class="icon">${t.icon}</span><span>${t.label}</span>
@@ -829,9 +833,8 @@ function renderContent(d) {
   const el=document.getElementById('content');
   if(state.tab==='cal') el.innerHTML=renderCal(d);
   else if(state.tab==='stand') el.innerHTML=renderStand(d);
-  else if(state.tab==='memo') el.innerHTML=renderMemos(d);
-  else if(state.tab==='fav') el.innerHTML=renderFavs(d);
-  else el.innerHTML=renderLead(d);
+  else if(state.tab==='my') el.innerHTML=renderMyPage(d);
+  else el.innerHTML=renderCal(d);
 }
 
 function renderCal(d) {
@@ -886,7 +889,7 @@ function renderCal(d) {
       return `<div class="card${isKia?' kia':''}" onclick="openModal(${i},'${sel}')">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div style="display:flex;align-items:center;gap:5px">
-            <button onclick="event.stopPropagation();toggleFav(g)" style="font-size:16px;line-height:1;padding:0 2px">${isFav(g)?'⭐':'☆'}</button>
+            <button onclick="event.stopPropagation();toggleFavByKey('${g.date}','${g.away}','${g.home}')" style="font-size:16px;line-height:1;padding:0 2px">${isFav(g)?'⭐':'☆'}</button>
             ${isLive?`<span style="font-size:9px;background:#E31837;color:#fff;border-radius:4px;padding:1px 5px;font-weight:700;animation:fadeIn 0.5s infinite alternate">🔴 LIVE</span>`:
               isFinal?`<span style="font-size:9px;background:rgba(0,0,0,0.25);color:#fff;border-radius:4px;padding:1px 5px;font-weight:700">종료</span>`:
               `<span style="font-size:11px;font-weight:700;color:#FFB300">${g.time} 시작</span>`}
@@ -1058,6 +1061,18 @@ function renderFavs(d) {
   return html;
 }
 
+
+function renderMyPage(d) {
+  const myTabs = [{id:'fav',label:'⭐ 즐겨찾기'},{id:'memo',label:'📝 메모'}];
+  if(!state.myTab) state.myTab = 'fav';
+  const content = state.myTab === 'fav' ? renderFavs(d) : renderMemos(d);
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      ${myTabs.map(t=>`<button onclick="state.myTab='${t.id}';render()" style="flex:1;padding:9px 0;background:${state.myTab===t.id?'#E31837':'transparent'};border:1px solid ${state.myTab===t.id?'#E31837':d.cardB};color:${state.myTab===t.id?'#fff':d.text};border-radius:10px;font-size:13px;font-weight:700;font-family:'Noto Sans KR',sans-serif">${t.label}</button>`).join('')}
+    </div>
+    ${content}`;
+}
+
 function renderStand(d) {
   return `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -1098,10 +1113,13 @@ function renderStand(d) {
           </div>
         </div>`).join('')}
     </div>
-    <div style="font-size:10px;color:${d.muted};text-align:right;margin-top:6px">* 2025 정규시즌 최종 순위 기준</div>`;
+    <div style="font-size:10px;color:${d.muted};text-align:right;margin-top:6px">* 2025 정규시즌 최종 순위 기준</div>
+    <div style="margin-top:22px">
+      ${renderLeadSection(d)}
+    </div>`;
 }
 
-function renderLead(d) {
+function renderLeadSection(d) {
   const LEAD={
     batting:[{name:"김도영",team:"KIA",label:"전시즌 MVP"},{name:"문보경",team:"LG",label:"국가대표"},{name:"안현민",team:"KT",label:"신인왕"}],
     hr:[{name:"노시환",team:"한화",label:"홈런왕 후보"},{name:"김도영",team:"KIA",label:"멀티툴"},{name:"채은성",team:"LG",label:"클러치"}],
@@ -1179,7 +1197,7 @@ function renderModal(d) {
           <span style="font-size:11px;font-weight:700;color:#FFB300">${g.time} · 📍${g.stad}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <button onclick="toggleFav(g)" style="font-size:20px;line-height:1">${isFav(g)?'⭐':'☆'}</button>
+          <button onclick="toggleFavByKey('${g.date}','${g.away}','${g.home}')" style="font-size:20px;line-height:1">${isFav(g)?'⭐':'☆'}</button>
           <button onclick="closeModal()" style="background:${d.bg};color:${d.sub};border-radius:50%;width:28px;height:28px;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
         </div>
       </div>
