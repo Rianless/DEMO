@@ -745,7 +745,7 @@ function render() { const d=D(); renderHeader(d); renderNav(); renderContent(d);
 function renderHeader(d) {
   document.getElementById('header').innerHTML = `
     <div style="background:${state.dark?'linear-gradient(180deg,#111827 0%,transparent 100%)':'linear-gradient(180deg,#fff 0%,transparent 100%)'};padding:18px 16px 12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="max-width:600px;margin:0 auto;display:flex;justify-content:space-between;align-items:flex-start">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:24px">🐯</span>
           <div>
