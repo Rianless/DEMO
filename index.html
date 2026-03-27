@@ -999,11 +999,14 @@ function renderMemos(d) {
   for(let i=0;i<localStorage.length;i++) {
     const k=localStorage.key(i);
     if(k&&k.startsWith('m_')) {
-      const val=localStorage.getItem(k);
-      if(val&&val.trim()) {
+      const raw=localStorage.getItem(k);
+      if(raw&&raw.trim()) {
         const parts=k.substring(2).split('_');
         const date=parts[0], away=parts[1], home=parts[2];
-        memos.push({date,away,home,memo:val});
+        let memoData={};
+        try{ memoData=JSON.parse(raw); if(typeof memoData==='string') memoData={text:raw}; }catch(e){ memoData={text:raw}; }
+        if(memoData.text||memoData.photo||memoData.watch)
+          memos.push({date,away,home,memo:memoData.text||'',watch:memoData.watch||'',photo:memoData.photo||null});
       }
     }
   }
@@ -1027,7 +1030,9 @@ function renderMemos(d) {
     html += logo(m.home,20);
     html += '<span style="font-size:10px;color:'+d.sub+';margin-left:auto">'+m.date+'</span>';
     html += '</div>';
-    html += '<div style="font-size:13px;color:'+d.text+';line-height:1.6;white-space:pre-wrap">'+m.memo+'</div>';
+    if(m.watch) html += '<span style="font-size:10px;font-weight:700;background:'+(m.watch==='직관'?'rgba(227,24,55,0.1)':'rgba(0,120,255,0.1)')+';color:'+(m.watch==='직관'?'#E31837':'#0078ff')+';border-radius:5px;padding:2px 7px;margin-bottom:6px;display:inline-block">'+(m.watch==='직관'?'⚾ 직관':'📺 집관')+'</span>';
+    if(m.memo) html += '<div style="font-size:13px;color:'+d.text+';line-height:1.6;white-space:pre-wrap;margin-top:4px">'+m.memo+'</div>';
+    if(m.photo) html += '<img src="'+m.photo+'" style="width:100%;border-radius:8px;margin-top:8px;max-height:160px;object-fit:cover"/>';
     html += '</div>';
   });
   return html;
@@ -1116,17 +1121,33 @@ function renderKiaWins(d) {
 }
 
 function renderMyPage(d) {
-  const myTabs = [{id:'win',label:'🏆 KIA 승리'},{id:'fav',label:'⭐ 즐겨찾기'},{id:'memo',label:'📝 메모'}];
+  // 세로 아코디언 방식 - 각 섹션 클릭 시 펼쳐짐
   if(!state.myTab) state.myTab = 'win';
-  let content = '';
-  if(state.myTab==='fav') content = renderFavs(d);
-  else if(state.myTab==='memo') content = renderMemos(d);
-  else content = renderKiaWins(d);
-  return `
-    <div style="display:flex;gap:6px;margin-bottom:16px">
-      ${myTabs.map(t=>`<button onclick="state.myTab='${t.id}';render()" style="flex:1;padding:8px 0;background:${state.myTab===t.id?'#E31837':'transparent'};border:1px solid ${state.myTab===t.id?'#E31837':d.cardB};color:${state.myTab===t.id?'#fff':d.text};border-radius:10px;font-size:11px;font-weight:700;font-family:'Noto Sans KR',sans-serif">${t.label}</button>`).join('')}
-    </div>
-    ${content}`;
+
+  const sections = [
+    {id:'win', label:'🏆 KIA 승리', fn: renderKiaWins},
+    {id:'fav', label:'⭐ 즐겨찾기', fn: renderFavs},
+    {id:'memo', label:'📝 메모', fn: renderMemos},
+  ];
+
+  let html = '';
+  sections.forEach(s => {
+    const isOpen = state.myTab === s.id;
+    const borderColor = isOpen ? '#E31837' : d.cardB;
+    const bgColor = isOpen ? 'rgba(227,24,55,0.04)' : d.card;
+    html += '<div style="margin-bottom:10px;border:2.5px solid '+borderColor+';border-radius:16px;overflow:hidden;background:'+bgColor+';transition:all 0.2s">';
+    html += '<button onclick="state.myTab=\''+s.id+'\';render()" style="width:100%;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;font-family:\'Noto Sans KR\',sans-serif">';
+    html += '<span style="font-size:15px;font-weight:800;color:'+(isOpen?'#E31837':d.text)+'">'+s.label+'</span>';
+    html += '<span style="font-size:12px;color:'+d.sub+'">'+(isOpen?'▲':'▼')+'</span>';
+    html += '</button>';
+    if(isOpen) {
+      html += '<div style="padding:0 14px 16px">';
+      html += s.fn(d);
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  return html;
 }
 
 function renderStand(d) {
@@ -1221,7 +1242,9 @@ function renderModal(d) {
   const lLabel=kiaHome?'HOME':'AWAY', rLabel=kiaHome?'AWAY':'HOME';
   const lScore=kiaHome?(g.homeScore??0):(g.awayScore??0);
   const rScore=kiaHome?(g.awayScore??0):(g.homeScore??0);
-  const memo=localStorage.getItem(`m_${g.date}_${g.away}_${g.home}`)||'';
+  const memoRaw=localStorage.getItem(`m_${g.date}_${g.away}_${g.home}`)||'{}';
+  let memoData={};
+  try{ memoData=JSON.parse(memoRaw); if(typeof memoData==='string') memoData={text:memoData}; }catch(e){ memoData={text:memoRaw}; }
   const isLive=g.status==='LIVE', isFinal=g.status==='FINAL';
 
   // 이닝 스코어 테이블
@@ -1351,14 +1374,58 @@ function renderModal(d) {
           </div>
           <span id="memo-saved" style="font-size:11px;color:#00C864;font-weight:700;display:none">저장됨 ✓</span>
         </div>
-        <textarea id="memo-input" placeholder="이 경기에 대한 생각이나 메모를 남겨보세요 ✍️" style="width:100%;min-height:90px;padding:12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:12px;color:${d.text};font-size:13px;line-height:1.6;resize:none">${memo}</textarea>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          ${['직관','집관','미시청'].map(v=>{
+            const sel = (memoData.watch||'') === v;
+            return `<button onclick="saveMemoField('watch','${v}')" style="flex:1;padding:7px 0;background:${sel?'#E31837':'transparent'};border:1.5px solid ${sel?'#E31837':d.bgB};color:${sel?'#fff':d.sub};border-radius:8px;font-size:12px;font-weight:700;font-family:'Noto Sans KR',sans-serif">${v==='직관'?'⚾ 직관':v==='집관'?'📺 집관':'— 미시청'}</button>`;
+          }).join('')}
+        </div>
+        <textarea id="memo-input" placeholder="이 경기에 대한 생각이나 메모를 남겨보세요 ✍️" style="width:100%;min-height:90px;padding:12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:12px;color:${d.text};font-size:13px;line-height:1.6;resize:none">${memoData.text||''}</textarea>
+        <div style="margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:10px;cursor:pointer">
+            <span style="font-size:13px">📷</span>
+            <span style="font-size:12px;color:${d.sub};flex:1">사진 추가</span>
+            <input type="file" accept="image/*" id="memo-photo-input" style="display:none" onchange="saveMemoPhoto(this)"/>
+            <span style="font-size:11px;color:#E31837;font-weight:700" onclick="document.getElementById('memo-photo-input').click()">선택</span>
+          </label>
+          <div id="memo-photo-preview" style="margin-top:8px">${memoData.photo?`<div style="position:relative;display:inline-block"><img src="${memoData.photo}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/><button onclick="saveMemoField('photo',null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button></div>`:''}</div>
+        </div>
       </div>
     </div>`;
-  document.getElementById('memo-input').addEventListener('input', e => {
-    localStorage.setItem(`m_${g.date}_${g.away}_${g.home}`, e.target.value);
+  const memoKey = `m_${g.date}_${g.away}_${g.home}`;
+
+  function getMemoData() {
+    try { return JSON.parse(localStorage.getItem(memoKey)||'{}'); } catch(e) { return {}; }
+  }
+  function saveMemoData(data) {
+    localStorage.setItem(memoKey, JSON.stringify(data));
     const s=document.getElementById('memo-saved');
-    s.style.display='inline'; clearTimeout(window._memoT);
-    window._memoT=setTimeout(()=>s.style.display='none',1500);
+    if(s){ s.style.display='inline'; clearTimeout(window._memoT); window._memoT=setTimeout(()=>s.style.display='none',1500); }
+  }
+  window.saveMemoField = function(field, val) {
+    const data = getMemoData();
+    if(val===null) delete data[field]; else data[field]=val;
+    if(field==='text') data.text=document.getElementById('memo-input')?.value||'';
+    saveMemoData(data);
+    renderModal(D());
+  };
+  window.saveMemoPhoto = function(input) {
+    if(!input.files||!input.files[0]) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = getMemoData();
+      data.photo = e.target.result;
+      saveMemoData(data);
+      const preview = document.getElementById('memo-photo-preview');
+      if(preview) preview.innerHTML = `<div style="position:relative;display:inline-block;width:100%"><img src="${e.target.result}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/><button onclick="saveMemoField('photo',null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button></div>`;
+    };
+    reader.readAsDataURL(input.files[0]);
+  };
+
+  document.getElementById('memo-input').addEventListener('input', e => {
+    const data = getMemoData();
+    data.text = e.target.value;
+    saveMemoData(data);
   });
 }
 
@@ -1377,7 +1444,12 @@ function openGameByKey(el) {
   }, 100);
 }
 
-function setTab(t){state.tab=t;render();}
+function setTab(t){
+  state.tab=t;
+  render();
+  window.scrollTo({top:0,behavior:'instant'});
+  document.getElementById('content').scrollTop=0;
+}
 function setLcat(c){state.lcat=c;render();}
 function toggleDark(){
   state.dark=!state.dark;
@@ -1422,6 +1494,35 @@ document.getElementById('modal-overlay').addEventListener('click',e=>{
 window.addEventListener('popstate',()=>{if(state.modalGame)closeModal();});
 
 setInterval(()=>{state.clock=new Date();render();},1000);
+
+// ── 탭 스와이프 ──
+(function(){
+  const TABS = ['cal','stand','my'];
+  let sx=0, sy=0, sScrollY=0;
+  const app = document.getElementById('app');
+
+  app.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    sScrollY = window.scrollY;
+  }, {passive:true});
+
+  app.addEventListener('touchend', e => {
+    // 모달 열려있으면 무시
+    if(state.modalGame) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    // 세로 스크롤 중이면 무시 (세로 이동이 가로보다 크면)
+    if(Math.abs(dy) > Math.abs(dx)) return;
+    // 스와이프 거리 부족하면 무시
+    if(Math.abs(dx) < 60) return;
+    // 스크롤이 내려간 상태면 무시
+    if(window.scrollY > 30) return;
+    const cur = TABS.indexOf(state.tab);
+    if(dx < 0 && cur < TABS.length-1) setTab(TABS[cur+1]); // 왼쪽 스와이프 → 다음 탭
+    else if(dx > 0 && cur > 0) setTab(TABS[cur-1]); // 오른쪽 스와이프 → 이전 탭
+  }, {passive:true});
+})();
 
 
 // ── 실시간 스코어 (MLB Stats API - KBO sportId=6) ──
