@@ -3,72 +3,73 @@ export default async function handler(req, res) {
 
   const today = new Date();
   const pad = n => String(n).padStart(2, '0');
-  const dateStr = `${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+  const yyyy = today.getFullYear();
+  const mm = pad(today.getMonth() + 1);
+  const dd = pad(today.getDate());
+  const dateStr = `${yyyy}${mm}${dd}`;
 
   const TEAM_MAP = {
     'KIA': 'KIA', 'KT': 'KT', 'LG': 'LG', 'SSG': 'SSG', 'NC': 'NC',
     '두산': '두산', '롯데': '롯데', '삼성': '삼성', '한화': '한화', '키움': '키움',
     'Tigers': 'KIA', 'Wiz': 'KT', 'Twins': 'LG', 'Landers': 'SSG', 'Dinos': 'NC',
     'Bears': '두산', 'Giants': '롯데', 'Lions': '삼성', 'Eagles': '한화', 'Heroes': '키움',
+    'HH': '한화', 'LT': '롯데', 'SS': '삼성', 'HB': '두산', 'KI': '키움',
+    'OB': '두산', 'WO': '키움',
   };
   const mapTeam = name => {
     if (!name) return name;
     for (const [k, v] of Object.entries(TEAM_MAP)) {
-      if (name.includes(k)) return v;
+      if (name === k || name.includes(k)) return v;
     }
     return name;
   };
 
   try {
-    // fields 쉼표를 %2C로 인코딩
-    const apiUrl = `https://api-gw.sports.naver.com/schedule/games?fields=basic%2Cschedule%2Cbaseball&upperCategoryId=kbaseball&categoryIds=kbo&fromDate=${dateStr}&toDate=${dateStr}&size=100`;
+    // KBO 공식 API (스포츠플래시 기반)
+    const url = `https://www.koreabaseball.com/ws/Schedule.asmx/GetScheduleList?leagueId=1&seriesId=0&gameDate=${dateStr}&teamId=0`;
 
-    const r = await fetch(apiUrl, {
+    const r = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://m.sports.naver.com/kbaseball/schedule/index',
-        'Origin': 'https://m.sports.naver.com',
-        'Accept': 'application/json',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Accept': 'application/json, text/javascript, */*',
+        'Referer': 'https://www.koreabaseball.com/',
       }
     });
 
     const text = await r.text();
 
     if (!r.ok) {
-      return res.status(200).json({ games: [], date: dateStr, error: `HTTP ${r.status}`, raw: text.substring(0, 200) });
+      return res.status(200).json({ games: [], date: dateStr, error: `KBO HTTP ${r.status}`, raw: text.substring(0, 300) });
     }
 
     let data;
     try { data = JSON.parse(text); }
     catch(e) {
-      return res.status(200).json({ games: [], date: dateStr, error: 'JSON 파싱 실패', raw: text.substring(0, 200) });
+      return res.status(200).json({ games: [], date: dateStr, error: 'JSON 파싱 실패', raw: text.substring(0, 300) });
     }
 
-    const rawGames = data?.result?.games || [];
+    // KBO 공식 사이트 응답 파싱
+    const rawGames = data?.d || data?.result || data?.games || data || [];
+    const list = Array.isArray(rawGames) ? rawGames : [];
 
-    const games = rawGames.map(g => {
-      const base = g.schedule || g;
-      const baseball = g.baseball || {};
-      const sc = String(base.statusCode || base.gameStatusCode || '');
+    const games = list.map(g => {
+      const sc = String(g.StatusCode || g.status || g.GameStatus || '');
       let status = 'SCHEDULED';
-      if (['1', 'LIVE'].includes(sc)) status = 'LIVE';
-      else if (['2', 'RESULT'].includes(sc)) status = 'FINAL';
-      const ai = baseball.awayScoreList || [];
-      const hi = baseball.homeScoreList || [];
+      if (['1', 'P', 'playing', 'LIVE'].includes(sc)) status = 'LIVE';
+      else if (['2', 'F', 'done', 'RESULT', 'result'].includes(sc)) status = 'FINAL';
+
       return {
-        date: dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-        time: (base.gameTime || '').substring(0, 5),
-        away: mapTeam(base.awayTeamName || base.awayTeam),
-        home: mapTeam(base.homeTeamName || base.homeTeam),
-        stad: base.stadiumName || '',
+        date: `${yyyy}-${mm}-${dd}`,
+        time: (g.GameTime || g.time || g.StartTime || '').substring(0, 5),
+        away: mapTeam(g.AwayTeamName || g.awayTeam || g.Away || ''),
+        home: mapTeam(g.HomeTeamName || g.homeTeam || g.Home || ''),
+        stad: g.StadiumName || g.stadium || g.Venue || '',
         status,
-        awayScore: base.awayScore ?? null,
-        homeScore: base.homeScore ?? null,
-        awayInnings: ai.length ? ai.map(Number) : Array(9).fill(-1),
-        homeInnings: hi.length ? hi.map(Number) : Array(9).fill(-1),
-        inning: baseball.currentInning || null,
-        gameId: base.gameId || '',
+        awayScore: g.AwayScore ?? g.awayScore ?? null,
+        homeScore: g.HomeScore ?? g.homeScore ?? null,
+        awayInnings: Array(9).fill(-1),
+        homeInnings: Array(9).fill(-1),
+        gameId: g.GameId || g.gameId || '',
       };
     });
 
