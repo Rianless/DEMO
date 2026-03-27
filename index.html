@@ -37,6 +37,8 @@
     .card.kia{background:rgba(227,24,55,0.08);border-color:rgba(227,24,55,0.25)}
     .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
     .cal-sticky{position:sticky;top:0;z-index:10;background:inherit;}
+    .cal-wrap{transition:none}
+    .cal-week-only .cal-grid#cal-grid-body .cal-cell:not(.current-week){display:none}
     .cal-cell{min-height:68px;padding:3px 2px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
     .cal-cell.sel{background:rgba(227,24,55,0.15)}
     .cal-cell.past{opacity:0.4}
@@ -837,7 +839,7 @@ function renderNav() {
 function renderContent(d) {
   const el=document.getElementById('content');
   if(state.tab==='cal') el.innerHTML=renderCal(d);
-  else if(state.tab==='stand') el.innerHTML=renderStand(d);
+  else if(state.tab==='stand') el.innerHTML=renderBaseballRecord(d);
   else if(state.tab==='my') el.innerHTML=renderMyPage(d);
   else el.innerHTML=renderCal(d);
 }
@@ -859,10 +861,18 @@ function renderCal(d) {
   const dw=['일','월','화','수','목','금','토'][new Date(yr,sm-1,sd).getDay()];
   let cells='';
   for(let i=0;i<f;i++) cells+=`<div class="cal-cell"></div>`;
+  // 오늘이 속한 주의 시작/끝 계산
+  const todayDateObj = new Date(today);
+  const todayDow = todayDateObj.getDay(); // 0=일
+  const weekStart = new Date(todayDateObj); weekStart.setDate(todayDateObj.getDate()-todayDow);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+
   for(let i=1;i<=days;i++) {
     const ds=`${yr}-${pad(mo)}-${pad(i)}`;
     const kg=kmap[i], isSel=ds===sel, isToday=ds===today;
     const dow=(f+i-1)%7, isPast=new Date(ds)<new Date('2026-03-28');
+    const dsDate=new Date(ds);
+    const isCurrentWeek=(dsDate>=weekStart&&dsDate<=weekEnd);
     const isHome=kg&&kg.home==='KIA', oppKey=kg?(isHome?kg.away:kg.home):null;
     const dayColor=dow===0?'#EF5350':dow===6?'#4FC3F7':d.text;
     // KIA 홈경기: 빨간 동그라미, 원정: 테두리 없음
@@ -878,7 +888,7 @@ function renderCal(d) {
     const statusBadge = kg&&kg.status==='LIVE'?'<div style="font-size:6px;background:#E31837;color:#fff;border-radius:2px;padding:0 2px;font-weight:700;line-height:1.4">LIVE</div>':'';
     // 날짜 스타일: 홈경기=빨간동그라미, 원정=기본, 선택=배경만
     const dayExtraStyle = isKiaGame&&isKiaHome ? 'background:rgba(227,24,55,0.15);border-color:#E31837;' : '';
-    cells+=`<div class="cal-cell${isSel?' sel':''}${isPast?' past':''}" onclick="selDate('${ds}')">
+    cells+=`<div class="cal-cell${isSel?' sel':''}${isPast?' past':''}${isCurrentWeek?' current-week':''}" onclick="selDate('${ds}')">
       <div class="cal-day${isToday?' today':''}${dow===5?' sat':dow===6?' sun':''}" style="color:${dayColor};${dayExtraStyle}">${resultEmoji||i}</div>
       ${isKiaGame?`<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
         ${logo(oppKey,22)}
@@ -976,13 +986,15 @@ function renderCal(d) {
       </div>`;
     })()}
     ${countdownHtml}
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px">
-      <button onclick="prevMo()" style="color:#E31837;font-size:22px;padding:4px 10px;line-height:1">‹</button>
-      <div style="font-size:17px;font-weight:900;min-width:110px;text-align:center;color:${d.text}">${yr}년 ${mo}월</div>
-      <button onclick="nextMo()" style="color:#E31837;font-size:22px;padding:4px 10px;line-height:1">›</button>
-      <button onclick="goToday()" style="font-size:11px;font-weight:700;color:#E31837;border:1.5px solid #E31837;border-radius:8px;padding:3px 8px;margin-left:4px">오늘</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:4px;flex:1;justify-content:center">
+        <button onclick="prevMo()" style="color:#E31837;font-size:22px;padding:4px 8px;line-height:1">‹</button>
+        <div style="font-size:17px;font-weight:900;min-width:120px;text-align:center;color:${d.text}">${yr}년 ${mo}월</div>
+        <button onclick="nextMo()" style="color:#E31837;font-size:22px;padding:4px 8px;line-height:1">›</button>
+      </div>
+      <button onclick="goToday()" style="font-size:11px;font-weight:700;color:#E31837;border:1.5px solid #E31837;border-radius:8px;padding:4px 10px;white-space:nowrap">오늘</button>
     </div>
-    <div style="position:sticky;top:0;z-index:10;background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
+    <div id="cal-wrap" style="position:sticky;top:0;z-index:10;background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
       <div class="cal-grid" style="border-bottom:1px solid ${d.bgB};background:${d.bg}">
         ${WDAYS.map((w,i)=>`<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:${i===0?'#EF5350':i===6?'#4FC3F7':d.sub}">${w}</div>`).join('')}
       </div>
@@ -995,6 +1007,93 @@ function renderCal(d) {
     ${gameList}`;
 }
 
+
+
+function renderBaseballRecord(d) {
+  // KIA 경기 중 FINAL인 것만 (순서: 최신순)
+  const kiaGames = SCH.filter(g =>
+    g.status === 'FINAL' && (g.away === 'KIA' || g.home === 'KIA')
+  ).sort((a,b) => b.date.localeCompare(a.date));
+
+  if(!kiaGames.length) {
+    return '<div style="text-align:center;padding:60px 20px">'
+      + '<div style="font-size:40px;margin-bottom:12px">⚾</div>'
+      + '<div style="font-size:15px;font-weight:700;color:'+d.text+'">아직 경기 기록이 없어요</div>'
+      + '<div style="font-size:12px;color:'+d.sub+';margin-top:6px">개막 후 경기가 끝나면 여기에 쌓여요!</div>'
+      + '</div>';
+  }
+
+  let html = '<div style="font-size:13px;font-weight:800;color:'+d.text+';margin-bottom:16px">⚾ 내 야구 기록</div>';
+
+  kiaGames.forEach(function(g) {
+    const isHome = g.home === 'KIA';
+    const opp = isHome ? g.away : g.home;
+    const kiaScore = isHome ? g.homeScore : g.awayScore;
+    const oppScore = isHome ? g.awayScore : g.homeScore;
+    const isWin = kiaScore > oppScore;
+    const memoKey = 'm_'+g.date+'_'+g.away+'_'+g.home;
+    let memoData = {};
+    try { memoData = JSON.parse(localStorage.getItem(memoKey)||'{}'); if(typeof memoData==='string') memoData={text:memoData}; } catch(e) {}
+
+    const winColor = isWin ? '#E31837' : '#4FC3F7';
+    const winLabel = isWin ? '승' : '패';
+
+    // 티켓 형태
+    html += '<div style="margin-bottom:14px;cursor:pointer" onclick="openGameByKey(this)" data-date="'+g.date+'" data-away="'+g.away+'" data-home="'+g.home+'">';
+    // 티켓 상단 (메인 정보)
+    html += '<div style="background:'+d.card+';border:2px solid '+winColor+';border-radius:16px 16px 0 0;padding:14px 16px">';
+    // 날짜 + 승패
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<span style="font-size:11px;color:'+d.sub+'">'+g.date+' · '+(isHome?'홈':'원정')+'</span>';
+    html += '<span style="font-size:12px;font-weight:900;color:#fff;background:'+winColor+';border-radius:20px;padding:2px 10px">'+winLabel+'</span>';
+    html += '</div>';
+    // 스코어
+    html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+    html += '<div style="display:flex;align-items:center;gap:8px;flex:1">'+logo('KIA',36)+'<span style="font-size:13px;font-weight:800;color:#ff6b6b">KIA 타이거즈</span></div>';
+    html += '<div style="text-align:center;padding:0 8px"><span style="font-size:24px;font-weight:900;color:'+winColor+'">'+kiaScore+'</span><span style="font-size:13px;color:'+d.sub+'"> : </span><span style="font-size:24px;font-weight:900;color:'+d.text+'">'+oppScore+'</span></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;flex:1;flex-direction:row-reverse">'+logo(opp,36)+'<span style="font-size:13px;font-weight:700;color:'+d.text+';text-align:right">'+(T[opp]?T[opp].name:opp)+'</span></div>';
+    html += '</div>';
+    html += '</div>';
+
+    // 티켓 점선 구분선
+    html += '<div style="background:'+d.card+';border-left:2px solid '+winColor+';border-right:2px solid '+winColor+';display:flex;align-items:center;padding:0 12px">';
+    html += '<div style="flex:1;border-top:2px dashed '+d.bgB+'"></div>';
+    html += '<div style="width:12px;height:12px;border-radius:50%;background:'+d.bg+';border:2px solid '+winColor+';margin:0 6px;flex-shrink:0"></div>';
+    html += '<div style="flex:1;border-top:2px dashed '+d.bgB+'"></div>';
+    html += '</div>';
+
+    // 티켓 하단 (메모)
+    html += '<div style="background:'+(d.dark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.02)')+';border:2px solid '+winColor+';border-top:none;border-radius:0 0 16px 16px;padding:12px 16px">';
+    if(memoData.watch) {
+      html += '<span style="font-size:10px;font-weight:700;background:'+(memoData.watch==='직관'?'rgba(227,24,55,0.1)':'rgba(0,120,255,0.1)')+';color:'+(memoData.watch==='직관'?'#E31837':'#0078ff')+';border-radius:5px;padding:2px 7px;margin-bottom:6px;display:inline-block">'+(memoData.watch==='직관'?'⚾ 직관':'📺 집관')+'</span><br>';
+    }
+    if(memoData.photo) {
+      html += '<img src="'+memoData.photo+'" style="width:100%;border-radius:8px;margin-bottom:8px;max-height:140px;object-fit:cover"/>';
+    }
+    // 메모 인라인 편집 가능
+    const memoId = 'rec-memo-'+g.date+'-'+g.away+'-'+g.home;
+    const safeDate = g.date, safeAway = g.away, safeHome = g.home;
+    html += '<textarea id="'+memoId+'" placeholder="메모를 남겨보세요... ✍️" '
+      + 'onclick="event.stopPropagation()" '
+      + 'data-date="'+safeDate+'" data-away="'+safeAway+'" data-home="'+safeHome+'" '
+      + 'onchange="saveRecordMemoEl(this)" '
+      + 'style="width:100%;min-height:60px;padding:8px;background:transparent;border:1px solid '+d.bgB+';border-radius:8px;color:'+d.text+';font-size:12px;line-height:1.6;resize:none">'
+      + (memoData.text||'')+'</textarea>';
+    html += '</div>';
+    html += '</div>';
+  });
+
+  return html;
+}
+
+window.saveRecordMemoEl = function(el) {
+  const date = el.dataset.date, away = el.dataset.away, home = el.dataset.home;
+  const key = 'm_'+date+'_'+away+'_'+home;
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(key)||'{}'); if(typeof data==='string') data={text:data}; } catch(e) {}
+  data.text = el.value;
+  localStorage.setItem(key, JSON.stringify(data));
+};
 
 function renderMemos(d) {
   const memos = [];
@@ -1150,10 +1249,8 @@ function renderMyPage(d) {
   if(!state.myTab) state.myTab = 'win';
 
   const sections = [
-    {id:'win',  label:'🏆 KIA 승리', fn: renderKiaWins},
     {id:'rank', label:'📊 순위',     fn: renderStand},
     {id:'fav',  label:'⭐ 즐겨찾기', fn: renderFavs},
-    {id:'memo', label:'📝 메모',     fn: renderMemos},
   ];
 
   // 프로필 섹션
@@ -1177,7 +1274,7 @@ function renderMyPage(d) {
   // 아코디언 섹션들
   sections.forEach(s => {
     const isOpen = state.myTab === s.id;
-    html += `<div style="margin-bottom:10px;border:2.5px solid ${isOpen?'#E31837':d.cardB};border-radius:16px;overflow:hidden;background:${isOpen?'rgba(227,24,55,0.03)':d.card}">`;
+    html += `<div style="margin-bottom:10px;border:2.5px solid ${isOpen?'#E31837':d.cardB};border-radius:16px;overflow:hidden;background:${d.card}">`;
     html += `<button onclick="state.myTab=state.myTab==='${s.id}'?null:'${s.id}';render();window.scrollTo({top:0,behavior:'instant'})" style="width:100%;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif">`;
     html += `<span style="font-size:15px;font-weight:800;color:${isOpen?'#E31837':d.text}">${s.label}</span>`;
     html += `<span style="font-size:12px;color:${d.sub}">${isOpen?'▲':'▼'}</span>`;
@@ -1231,10 +1328,7 @@ function renderStand(d) {
         </div>`).join('')}
     </div>
     <div style="font-size:10px;color:${d.muted};text-align:right;margin-top:6px">* 2025 정규시즌 최종 순위 기준</div>
-    <div style="margin-top:22px">
-      <div style="font-size:13px;font-weight:800;color:${d.text};margin-bottom:12px">🏆 KIA 승리 기록</div>
-      ${renderKiaWins(d)}
-    </div>`;
+`;
 }
 
 function renderLeadSection(d) {
@@ -1423,12 +1517,12 @@ function renderModal(d) {
         </div>
         <textarea id="memo-input" placeholder="이 경기에 대한 생각이나 메모를 남겨보세요 ✍️" style="width:100%;min-height:90px;padding:12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:12px;color:${d.text};font-size:13px;line-height:1.6;resize:none">${memoData.text||''}</textarea>
         <div style="margin-top:8px">
-          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:10px;cursor:pointer">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:10px">
             <span style="font-size:13px">📷</span>
             <span style="font-size:12px;color:${d.sub};flex:1">사진 추가</span>
-            <input type="file" accept="image/*" id="memo-photo-input" style="display:none" onchange="saveMemoPhoto(this)" onclick="this.value=''"/>
-            <span style="font-size:11px;color:#E31837;font-weight:700" onclick="document.getElementById('memo-photo-input').click()">선택</span>
-          </label>
+            <input type="file" accept="image/*" id="memo-photo-input" style="display:none" onchange="saveMemoPhoto(this)"/>
+            <button onclick="document.getElementById('memo-photo-input').click()" style="font-size:11px;color:#E31837;font-weight:700;font-family:'Noto Sans KR',sans-serif;background:none;border:none;cursor:pointer;padding:4px 8px;border:1px solid #E31837;border-radius:6px">선택</button>
+          </div>
           <div id="memo-photo-preview" style="margin-top:8px">${memoData.photo?`<div style="position:relative;display:inline-block"><img src="${memoData.photo}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/><button onclick="saveMemoField('photo',null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button></div>`:''}</div>
         </div>
         <button onclick="closeModal()" style="width:100%;margin-top:14px;padding:14px;background:#E31837;color:#fff;border-radius:12px;font-size:15px;font-weight:800;font-family:'Noto Sans KR',sans-serif;border:none;cursor:pointer">✓ 완료</button>
@@ -1589,6 +1683,33 @@ document.getElementById('modal-overlay').addEventListener('click',e=>{
 window.addEventListener('popstate',()=>{if(state.modalGame)closeModal();});
 
 setInterval(()=>{state.clock=new Date();render();},1000);
+
+// ── 달력 스크롤 주간 전환 ──
+(function(){
+  let calCollapsed = false;
+  window.addEventListener('scroll', function() {
+    const wrap = document.getElementById('cal-wrap');
+    const grid = document.getElementById('cal-grid-body');
+    if(!wrap || !grid) return;
+    const scrollY = window.scrollY;
+    if(scrollY > 80 && !calCollapsed) {
+      calCollapsed = true;
+      // 현재 주만 보이게 - 나머지 행 숨기기
+      const cells = grid.querySelectorAll('.cal-cell');
+      cells.forEach(cell => {
+        if(!cell.classList.contains('current-week')) {
+          cell.style.display = 'none';
+        }
+      });
+      wrap.style.borderRadius = '0 0 14px 14px';
+    } else if(scrollY <= 20 && calCollapsed) {
+      calCollapsed = false;
+      const cells = grid.querySelectorAll('.cal-cell');
+      cells.forEach(cell => { cell.style.display = ''; });
+      wrap.style.borderRadius = '14px';
+    }
+  }, {passive:true});
+})();
 
 // ── 탭 스와이프 ──
 (function(){
