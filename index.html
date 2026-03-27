@@ -21,7 +21,7 @@
     @keyframes slideDown{from{transform:translateY(0)}to{transform:translateY(100%)}}
     #modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);display:none;align-items:flex-end;justify-content:center;animation:fadeIn 0.2s}
     #modal-overlay.open{display:flex}
-    #modal-box{width:100%;max-width:520px;background:#fff;border-radius:22px 22px 0 0;max-height:92vh;overflow-y:auto;padding-bottom:28px;animation:slideUp 0.3s ease}
+    #modal-box{width:100%;max-width:520px;background:#fff;border-radius:22px 22px 0 0;height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:28px;animation:slideUp 0.3s ease}
     #modal-box.closing{animation:slideDown 0.28s ease forwards}
     body.dark #modal-box{background:#0F1525}
     .nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid rgba(0,0,0,0.1);display:flex;padding-bottom:6px;z-index:50}
@@ -36,6 +36,7 @@
     body.dark .card{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.07)}
     .card.kia{background:rgba(227,24,55,0.08);border-color:rgba(227,24,55,0.25)}
     .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+    .cal-sticky{position:sticky;top:0;z-index:10;background:inherit;}
     .cal-cell{min-height:68px;padding:3px 2px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
     .cal-cell.sel{background:rgba(227,24,55,0.15)}
     .cal-cell.past{opacity:0.4}
@@ -760,7 +761,7 @@ function getDday() {
 
 const pad = n => String(n).padStart(2,'0');
 const dim = (y,m) => new Date(y,m,0).getDate();
-const fdow = (y,m) => { const d=new Date(y,m-1,1).getDay(); return d===0?6:d-1; };
+const fdow = (y,m) => new Date(y,m-1,1).getDay();
 const logo = (team,size) => { const t=T[team]; if(!t) return ''; return `<img src="${t.img}" style="width:${size}px;height:${size}px;object-fit:contain" onerror="this.style.display='none'">`; };
 const D = () => state.dark ? {
   text:'#fff',sub:'rgba(255,255,255,0.4)',muted:'rgba(255,255,255,0.15)',
@@ -843,7 +844,7 @@ function renderContent(d) {
 
 function renderCal(d) {
   const {yr,mo,sel}=state;
-  const WDAYS=['월','화','수','목','금','토','일'];
+  const WDAYS=['일','월','화','수','목','금','토'];
   const f=fdow(yr,mo), days=dim(yr,mo);
   const today='2026-03-27';
   const kmap={};
@@ -863,7 +864,7 @@ function renderCal(d) {
     const kg=kmap[i], isSel=ds===sel, isToday=ds===today;
     const dow=(f+i-1)%7, isPast=new Date(ds)<new Date('2026-03-28');
     const isHome=kg&&kg.home==='KIA', oppKey=kg?(isHome?kg.away:kg.home):null;
-    const dayColor=dow===5?'#4FC3F7':dow===6?'#EF5350':d.text;
+    const dayColor=dow===0?'#EF5350':dow===6?'#4FC3F7':d.text;
     // KIA 홈경기: 빨간 동그라미, 원정: 테두리 없음
     const isKiaHome = kg&&kg.home==='KIA';
     const isKiaGame = !!kg&&!!oppKey;
@@ -979,12 +980,13 @@ function renderCal(d) {
       <button onclick="prevMo()" style="color:#E31837;font-size:22px;padding:4px 10px;line-height:1">‹</button>
       <div style="font-size:17px;font-weight:900;min-width:110px;text-align:center;color:${d.text}">${yr}년 ${mo}월</div>
       <button onclick="nextMo()" style="color:#E31837;font-size:22px;padding:4px 10px;line-height:1">›</button>
+      <button onclick="goToday()" style="font-size:11px;font-weight:700;color:#E31837;border:1.5px solid #E31837;border-radius:8px;padding:3px 8px;margin-left:4px">오늘</button>
     </div>
-    <div style="background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
-      <div class="cal-grid" style="border-bottom:1px solid ${d.bgB}">
-        ${WDAYS.map((w,i)=>`<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:${i===5?'#4FC3F7':i===6?'#EF5350':d.sub}">${w}</div>`).join('')}
+    <div style="position:sticky;top:0;z-index:10;background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
+      <div class="cal-grid" style="border-bottom:1px solid ${d.bgB};background:${d.bg}">
+        ${WDAYS.map((w,i)=>`<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:${i===0?'#EF5350':i===6?'#4FC3F7':d.sub}">${w}</div>`).join('')}
       </div>
-      <div class="cal-grid">${cells}</div>
+      <div class="cal-grid" id="cal-grid-body">${cells}</div>
     </div>
     <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
       <div style="font-size:14px;font-weight:900;color:${d.text}">${sm}월 ${sd}일 (${dw})</div>
@@ -1082,6 +1084,27 @@ function renderFavs(d) {
 
 
 
+
+// ── 프로필 ──
+function getProfile() {
+  try { return JSON.parse(localStorage.getItem('kbo_profile')||'{}'); } catch(e) { return {}; }
+}
+function saveProfile(data) {
+  localStorage.setItem('kbo_profile', JSON.stringify({...getProfile(),...data}));
+  render();
+}
+function editNickname() {
+  const cur = getProfile().nickname||'';
+  const name = prompt('닉네임을 입력하세요', cur);
+  if(name !== null) saveProfile({nickname: name.trim()||'타이거즈 팬'});
+}
+function setProfilePhoto(input) {
+  if(!input.files||!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => { saveProfile({photo: e.target.result}); };
+  reader.readAsDataURL(input.files[0]);
+}
+
 function renderKiaWins(d) {
   const wins = SCH.filter(g => {
     if(g.status !== 'FINAL') return false;
@@ -1121,31 +1144,48 @@ function renderKiaWins(d) {
 }
 
 function renderMyPage(d) {
-  // 세로 아코디언 방식 - 각 섹션 클릭 시 펼쳐짐
+  const profile = getProfile();
+  const nickname = profile.nickname || '타이거즈 팬';
+  const photoSrc = profile.photo || '';
   if(!state.myTab) state.myTab = 'win';
 
   const sections = [
-    {id:'win', label:'🏆 KIA 승리', fn: renderKiaWins},
-    {id:'fav', label:'⭐ 즐겨찾기', fn: renderFavs},
-    {id:'memo', label:'📝 메모', fn: renderMemos},
+    {id:'win',  label:'🏆 KIA 승리', fn: renderKiaWins},
+    {id:'rank', label:'📊 순위',     fn: renderStand},
+    {id:'fav',  label:'⭐ 즐겨찾기', fn: renderFavs},
+    {id:'memo', label:'📝 메모',     fn: renderMemos},
   ];
 
-  let html = '';
+  // 프로필 섹션
+  let html = `<div style="display:flex;align-items:center;gap:14px;padding:16px;background:${d.card};border:2.5px solid ${d.cardB};border-radius:16px;margin-bottom:16px">
+    <div style="position:relative">
+      <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:${d.bg};border:2px solid #E31837;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="document.getElementById('profile-photo-input').click()">
+        ${photoSrc ? `<img src="${photoSrc}" style="width:100%;height:100%;object-fit:cover"/>` : '<span style="font-size:28px">🐯</span>'}
+      </div>
+      <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;background:#E31837;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="document.getElementById('profile-photo-input').click()">
+        <span style="font-size:11px;color:#fff">+</span>
+      </div>
+      <input type="file" accept="image/*" id="profile-photo-input" style="display:none" onchange="setProfilePhoto(this)"/>
+    </div>
+    <div style="flex:1">
+      <div style="font-size:17px;font-weight:900;color:${d.text}">${nickname}</div>
+      <div style="font-size:11px;color:${d.sub};margin-top:2px">KIA 타이거즈 팬</div>
+    </div>
+    <button onclick="editNickname()" style="font-size:11px;color:${d.sub};border:1px solid ${d.cardB};border-radius:8px;padding:5px 10px;font-family:'Noto Sans KR',sans-serif">닉네임 변경</button>
+  </div>`;
+
+  // 아코디언 섹션들
   sections.forEach(s => {
     const isOpen = state.myTab === s.id;
-    const borderColor = isOpen ? '#E31837' : d.cardB;
-    const bgColor = isOpen ? 'rgba(227,24,55,0.04)' : d.card;
-    html += '<div style="margin-bottom:10px;border:2.5px solid '+borderColor+';border-radius:16px;overflow:hidden;background:'+bgColor+';transition:all 0.2s">';
-    html += '<button onclick="state.myTab=\''+s.id+'\';render()" style="width:100%;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;font-family:\'Noto Sans KR\',sans-serif">';
-    html += '<span style="font-size:15px;font-weight:800;color:'+(isOpen?'#E31837':d.text)+'">'+s.label+'</span>';
-    html += '<span style="font-size:12px;color:'+d.sub+'">'+(isOpen?'▲':'▼')+'</span>';
-    html += '</button>';
+    html += `<div style="margin-bottom:10px;border:2.5px solid ${isOpen?'#E31837':d.cardB};border-radius:16px;overflow:hidden;background:${isOpen?'rgba(227,24,55,0.03)':d.card}">`;
+    html += `<button onclick="state.myTab=state.myTab==='${s.id}'?null:'${s.id}';render();window.scrollTo({top:0,behavior:'instant'})" style="width:100%;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;background:none;border:none;cursor:pointer;font-family:'Noto Sans KR',sans-serif">`;
+    html += `<span style="font-size:15px;font-weight:800;color:${isOpen?'#E31837':d.text}">${s.label}</span>`;
+    html += `<span style="font-size:12px;color:${d.sub}">${isOpen?'▲':'▼'}</span>`;
+    html += `</button>`;
     if(isOpen) {
-      html += '<div style="padding:0 14px 16px">';
-      html += s.fn(d);
-      html += '</div>';
+      html += `<div style="padding:0 14px 16px">${s.fn(d)}</div>`;
     }
-    html += '</div>';
+    html += `</div>`;
   });
   return html;
 }
@@ -1192,7 +1232,8 @@ function renderStand(d) {
     </div>
     <div style="font-size:10px;color:${d.muted};text-align:right;margin-top:6px">* 2025 정규시즌 최종 순위 기준</div>
     <div style="margin-top:22px">
-      ${renderLeadSection(d)}
+      <div style="font-size:13px;font-weight:800;color:${d.text};margin-bottom:12px">🏆 KIA 승리 기록</div>
+      ${renderKiaWins(d)}
     </div>`;
 }
 
@@ -1385,11 +1426,12 @@ function renderModal(d) {
           <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:${d.bg};border:1px solid ${d.bgB};border-radius:10px;cursor:pointer">
             <span style="font-size:13px">📷</span>
             <span style="font-size:12px;color:${d.sub};flex:1">사진 추가</span>
-            <input type="file" accept="image/*" id="memo-photo-input" style="display:none" onchange="saveMemoPhoto(this)"/>
+            <input type="file" accept="image/*" id="memo-photo-input" style="display:none" onchange="saveMemoPhoto(this)" onclick="this.value=''"/>
             <span style="font-size:11px;color:#E31837;font-weight:700" onclick="document.getElementById('memo-photo-input').click()">선택</span>
           </label>
           <div id="memo-photo-preview" style="margin-top:8px">${memoData.photo?`<div style="position:relative;display:inline-block"><img src="${memoData.photo}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/><button onclick="saveMemoField('photo',null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button></div>`:''}</div>
         </div>
+        <button onclick="closeModal()" style="width:100%;margin-top:14px;padding:14px;background:#E31837;color:#fff;border-radius:12px;font-size:15px;font-weight:800;font-family:'Noto Sans KR',sans-serif;border:none;cursor:pointer">✓ 완료</button>
       </div>
     </div>`;
   const memoKey = `m_${g.date}_${g.away}_${g.home}`;
@@ -1399,9 +1441,38 @@ function renderModal(d) {
   }
   function saveMemoData(data) {
     localStorage.setItem(memoKey, JSON.stringify(data));
+    // 클라우드 동기화 (window.storage 사용 가능 시)
+    if(window.storage) {
+      window.storage.set(memoKey, JSON.stringify(data)).catch(()=>{});
+    }
     const s=document.getElementById('memo-saved');
     if(s){ s.style.display='inline'; clearTimeout(window._memoT); window._memoT=setTimeout(()=>s.style.display='none',1500); }
   }
+  // 클라우드에서 메모 동기화
+  async function syncMemoFromCloud() {
+    if(!window.storage) return;
+    try {
+      const result = await window.storage.get(memoKey);
+      if(result && result.value) {
+        const cloudData = JSON.parse(result.value);
+        const localData = getMemoData();
+        // 둘 다 있으면 최신 것 사용 (클라우드 우선)
+        const merged = {...localData, ...cloudData};
+        localStorage.setItem(memoKey, JSON.stringify(merged));
+        // 화면 갱신
+        const input = document.getElementById('memo-input');
+        if(input && merged.text) input.value = merged.text;
+        const preview = document.getElementById('memo-photo-preview');
+        if(preview && merged.photo) {
+          preview.innerHTML = '<div style="position:relative;display:inline-block;width:100%">'
+            + '<img src="'+merged.photo+'" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/>'
+            + '<button onclick="saveMemoField(&quot;photo&quot;,null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:28px;height:28px;font-size:14px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer">✕</button>'
+            + '</div>';
+        }
+      }
+    } catch(e) {}
+  }
+  syncMemoFromCloud();
   window.saveMemoField = function(field, val) {
     const data = getMemoData();
     if(val===null) delete data[field]; else data[field]=val;
@@ -1410,16 +1481,31 @@ function renderModal(d) {
     renderModal(D());
   };
   window.saveMemoPhoto = function(input) {
-    if(!input.files||!input.files[0]) return;
+    if(!input||!input.files||!input.files[0]) return;
+    const file = input.files[0];
+    // 파일 크기 제한 2MB (localStorage 용량 초과 방지)
+    if(file.size > 2*1024*1024) {
+      alert('사진 크기가 너무 커요. 2MB 이하의 사진을 선택해 주세요.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = e => {
+      if(!e.target||!e.target.result) return;
       const data = getMemoData();
       data.photo = e.target.result;
       saveMemoData(data);
       const preview = document.getElementById('memo-photo-preview');
-      if(preview) preview.innerHTML = `<div style="position:relative;display:inline-block;width:100%"><img src="${e.target.result}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/><button onclick="saveMemoField('photo',null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:24px;height:24px;font-size:13px;display:flex;align-items:center;justify-content:center">✕</button></div>`;
+      if(preview) {
+        preview.innerHTML = '<div style="position:relative;display:inline-block;width:100%">'
+          + '<img src="'+e.target.result+'" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover"/>'
+          + '<button onclick="saveMemoField(&quot;photo&quot;,null)" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;width:28px;height:28px;font-size:14px;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer">✕</button>'
+          + '</div>';
+      }
+      // input 초기화 (갤럭시 중복 선택 방지)
+      input.value = '';
     };
-    reader.readAsDataURL(input.files[0]);
+    reader.onerror = () => alert('사진을 불러오는 데 실패했어요. 다시 시도해 주세요.');
+    reader.readAsDataURL(file);
   };
 
   document.getElementById('memo-input').addEventListener('input', e => {
@@ -1451,6 +1537,15 @@ function setTab(t){
   document.getElementById('content').scrollTop=0;
 }
 function setLcat(c){state.lcat=c;render();}
+function goToday(){
+  const now=new Date();
+  const kst=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Seoul'}));
+  state.yr=kst.getFullYear();
+  state.mo=kst.getMonth()+1;
+  state.sel=kst.getFullYear()+'-'+String(kst.getMonth()+1).padStart(2,'0')+'-'+String(kst.getDate()).padStart(2,'0');
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 function toggleDark(){
   state.dark=!state.dark;
   document.body.classList.toggle('dark',state.dark);
