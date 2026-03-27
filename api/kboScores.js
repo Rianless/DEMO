@@ -22,65 +22,95 @@ export default async function handler(req, res) {
     return name;
   };
 
-  try {
-    // KBO 공식 API - 올바른 파라미터
-    const url = `https://www.koreabaseball.com/ws/Schedule.asmx/GetScheduleList?leId=1&srId=0,9&date=${dateStr}`;
+  const attempts = [];
 
+  // 1차: 스포츠플래시 API
+  try {
+    const url = `https://sports.daum.net/sports/api/game/dayschedule.json?type=baseball&leagueCode=kbo&dateStr=${dateStr}`;
     const r = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-        'Accept': 'application/json, text/javascript, */*',
-        'Referer': 'https://www.koreabaseball.com/Schedule/Schedule.aspx',
-        'Content-Type': 'application/json; charset=utf-8',
+        'Referer': 'https://sports.daum.net/schedule/kbo',
+        'Accept': 'application/json',
       }
     });
-
     const text = await r.text();
+    attempts.push({ url, status: r.status, preview: text.substring(0, 150) });
 
-    if (!r.ok) {
-      return res.status(200).json({ games: [], date: dateStr, error: `HTTP ${r.status}`, raw: text.substring(0, 300) });
+    if (r.ok) {
+      const data = JSON.parse(text);
+      const list = data?.schedule || data?.games || data?.data || [];
+      if (list.length > 0) {
+        const games = list.map(g => {
+          const sc = String(g.statusCode || g.gameStatus || g.status || '');
+          let status = 'SCHEDULED';
+          if (['1','PLAY','live'].includes(sc)) status = 'LIVE';
+          else if (['2','END','done','result'].includes(sc)) status = 'FINAL';
+          return {
+            date: `${yyyy}-${mm}-${dd}`,
+            time: (g.startTime || g.gameTime || '').substring(0, 5),
+            away: mapTeam(g.awayTeamName || g.awayTeam || ''),
+            home: mapTeam(g.homeTeamName || g.homeTeam || ''),
+            stad: g.venueName || g.stadium || '',
+            status,
+            awayScore: g.awayScore ?? null,
+            homeScore: g.homeScore ?? null,
+            awayInnings: Array(9).fill(-1),
+            homeInnings: Array(9).fill(-1),
+            gameId: g.gameCode || g.gameId || '',
+          };
+        });
+        return res.status(200).json({ games, date: dateStr, total: games.length, src: 'daum' });
+      }
     }
+  } catch(e) { attempts.push({ src: 'daum', error: e.message }); }
 
-    let data;
-    try { data = JSON.parse(text); }
-    catch(e) {
-      return res.status(200).json({ games: [], date: dateStr, error: 'JSON 파싱 실패', raw: text.substring(0, 300) });
-    }
-
-    // d 필드 안에 배열
-    const list = data?.d || [];
-
-    const games = list.map(g => {
-      const sc = String(g.GameStatus || g.StatusCode || '');
-      let status = 'SCHEDULED';
-      if (sc === 'P' || sc === '1') status = 'LIVE';
-      else if (sc === 'F' || sc === '2') status = 'FINAL';
-
-      // 이닝별 스코어 파싱
-      const parseInnings = str => {
-        if (!str) return Array(9).fill(-1);
-        return str.split('|').map(n => n === '' ? -1 : Number(n));
-      };
-
-      return {
-        date: `${yyyy}-${mm}-${dd}`,
-        time: (g.StartTime || g.GameTime || '').substring(0, 5),
-        away: mapTeam(g.AwayTeamName || ''),
-        home: mapTeam(g.HomeTeamName || ''),
-        stad: g.StadiumName || '',
-        status,
-        awayScore: g.AwayScore != null ? Number(g.AwayScore) : null,
-        homeScore: g.HomeScore != null ? Number(g.HomeScore) : null,
-        awayInnings: parseInnings(g.AwayScoreStr),
-        homeInnings: parseInnings(g.HomeScoreStr),
-        inning: g.CurrentInning || null,
-        gameId: g.GameId || '',
-      };
+  // 2차: 스포츠서울 API
+  try {
+    const url = `https://api.sportsseoul.com/kbo/schedule?date=${yyyy}-${mm}-${dd}`;
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Accept': 'application/json',
+      }
     });
+    const text = await r.text();
+    attempts.push({ url, status: r.status, preview: text.substring(0, 150) });
+    if (r.ok) {
+      const data = JSON.parse(text);
+      const list = data?.data || data?.games || [];
+      if (list.length > 0) {
+        const games = list.map(g => ({
+          date: `${yyyy}-${mm}-${dd}`,
+          time: (g.startTime || '').substring(0, 5),
+          away: mapTeam(g.awayTeam || ''),
+          home: mapTeam(g.homeTeam || ''),
+          stad: g.stadium || '',
+          status: 'SCHEDULED',
+          awayScore: g.awayScore ?? null,
+          homeScore: g.homeScore ?? null,
+          awayInnings: Array(9).fill(-1),
+          homeInnings: Array(9).fill(-1),
+          gameId: g.gameId || '',
+        }));
+        return res.status(200).json({ games, date: dateStr, total: games.length, src: 'sportsseoul' });
+      }
+    }
+  } catch(e) { attempts.push({ src: 'sportsseoul', error: e.message }); }
 
-    res.status(200).json({ games, date: dateStr, total: games.length });
+  // 3차: statiz API
+  try {
+    const url = `https://www.statiz.co.kr/api/schedule?date=${yyyy}-${mm}-${dd}`;
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Accept': 'application/json',
+        'Referer': 'https://www.statiz.co.kr/',
+      }
+    });
+    const text = await r.text();
+    attempts.push({ url, status: r.status, preview: text.substring(0, 150) });
+  } catch(e) { attempts.push({ src: 'statiz', error: e.message }); }
 
-  } catch(e) {
-    res.status(200).json({ games: [], date: dateStr, error: e.message });
-  }
+  res.status(200).json({ games: [], date: dateStr, error: '모든 API 실패', debug: attempts });
 }
