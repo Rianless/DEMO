@@ -726,6 +726,22 @@ function renderDiamond(players, color, dark) {
   </div>`;
 }
 
+
+// ── 개막 D-day 자동 계산 ──
+function getDday() {
+  const now = new Date();
+  const kstNow = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Seoul'}));
+  const nowDate = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate());
+  const openDate = new Date(2026, 2, 28); // 3월 28일 개막
+  const postseasonDate = new Date(2026, 7, 20); // 8월 20일 가을야구
+  // 8/20 이후면 가을야구
+  if (nowDate >= postseasonDate) return 'POSTSEASON';
+  const diff = Math.round((openDate - nowDate) / (1000*60*60*24));
+  if (diff > 0) return `D-${diff}`;
+  if (diff === 0) return 'D-Day';
+  return `D+${Math.abs(diff)}`;
+}
+
 const pad = n => String(n).padStart(2,'0');
 const dim = (y,m) => new Date(y,m,0).getDate();
 const fdow = (y,m) => { const d=new Date(y,m-1,1).getDay(); return d===0?6:d-1; };
@@ -861,17 +877,24 @@ function renderCal(d) {
     }).join('');
   }
   return `
-    ${yr===2026&&mo===3?`<div style="background:linear-gradient(135deg,rgba(227,24,55,0.15),rgba(255,179,0,0.1));border:1px solid rgba(227,24,55,0.3);border-radius:12px;padding:11px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
-      <span style="font-size:20px">⚾</span>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:900;color:${d.text}">2026 KBO 개막까지 <span style="color:#E31837">D-1</span></div>
-        <div style="font-size:11px;color:${d.sub}">3/28(토) · 인천 SSG랜더스필드 · 14:00</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:11px;color:#FFB300;font-weight:700">KIA 원정개막</div>
-        <div style="font-size:11px;color:${d.sub}">🐯 vs 🚀</div>
-      </div>
-    </div>`:''}
+    ${(()=>{
+      const dday = getDday();
+      const isDday = dday === 'D-Day';
+
+      return `<div style="background:linear-gradient(135deg,rgba(227,24,55,0.15),rgba(255,179,0,0.1));border:1px solid rgba(227,24,55,0.3);border-radius:12px;padding:11px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">⚾</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:900;color:${d.text}">
+            ${dday==='POSTSEASON'?'🍂 가을야구 시작!':isDday?'🎉 오늘 KBO 개막!':dday.startsWith('D+')?'🔥 2026 KBO 시즌':'2026 KBO 개막까지'} <span style="color:#E31837">${dday==='POSTSEASON'?'포스트시즌':dday}</span>
+          </div>
+          <div style="font-size:11px;color:${d.sub}">3/28(토) · 인천 SSG랜더스필드 · 14:00</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:#FFB300;font-weight:700">KIA 원정개막</div>
+          <div style="font-size:11px;color:${d.sub}">🐯 vs 🚀</div>
+        </div>
+      </div>`;
+    })()}
     <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px">
       <button onclick="prevMo()" style="color:#E31837;font-size:22px;padding:4px 10px;line-height:1">‹</button>
       <div style="font-size:17px;font-weight:900;min-width:110px;text-align:center;color:${d.text}">${yr}년 ${mo}월</div>
@@ -1116,6 +1139,67 @@ document.getElementById('modal-overlay').addEventListener('click',e=>{
 window.addEventListener('popstate',()=>{if(state.modalGame)closeModal();});
 
 setInterval(()=>{state.clock=new Date();render();},1000);
+
+
+// ── 실시간 스코어 (MLB Stats API - KBO sportId=6) ──
+async function fetchTodayScores() {
+  const now = new Date();
+  const kst = new Date(now.toLocaleString('en-US', {timeZone:'Asia/Seoul'}));
+  const pad = n => String(n).padStart(2,'0');
+  const yyyy = kst.getFullYear();
+  const mm = pad(kst.getMonth()+1);
+  const dd = pad(kst.getDate());
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  const TEAM = {
+    'KIA Tigers':'KIA','KT Wiz':'KT','LG Twins':'LG','SSG Landers':'SSG','NC Dinos':'NC',
+    'Doosan Bears':'두산','Lotte Giants':'롯데','Samsung Lions':'삼성','Hanwha Eagles':'한화','Kiwoom Heroes':'키움',
+  };
+  const mapTeam = n => {
+    if(!n) return n;
+    for(const [k,v] of Object.entries(TEAM)) if(n.includes(k)) return v;
+    return n;
+  };
+
+  try {
+    const url = `/api/kboScores`;
+    const r = await fetch(url);
+    if(!r.ok) return;
+    const data = await r.json();
+    const games = data?.games || [];
+    if(!games.length) return;
+
+    let updated = false;
+    games.forEach(g => {
+      const idx = SCH.findIndex(s => s.date===g.date && s.away===g.away && s.home===g.home);
+      if(idx !== -1) {
+        if(g.status) SCH[idx].status = g.status;
+        if(g.awayScore != null) SCH[idx].awayScore = g.awayScore;
+        if(g.homeScore != null) SCH[idx].homeScore = g.homeScore;
+        if(g.awayInnings?.some(x=>x>=0)) SCH[idx].awayInnings = g.awayInnings;
+        if(g.homeInnings?.some(x=>x>=0)) SCH[idx].homeInnings = g.homeInnings;
+        if(g.inning) SCH[idx].inning = g.inning;
+        updated = true;
+      }
+    });
+
+    // 열려있는 모달도 갱신
+    if(updated) {
+      const kstDate = `${yyyy}-${mm}-${dd}`;
+      if(state.sel === kstDate) render();
+      if(state.modalGame) {
+        const mg = SCH.find(s => s.date===state.modalGame.date && s.away===state.modalGame.away && s.home===state.modalGame.home);
+        if(mg) { state.modalGame = mg; renderModal(D()); }
+      }
+    }
+  } catch(e) {
+    console.log('스코어 갱신 실패:', e.message);
+  }
+}
+
+// 30초마다 갱신
+fetchTodayScores();
+setInterval(fetchTodayScores, 30000);
 
 render();
 </script>
