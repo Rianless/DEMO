@@ -28,7 +28,7 @@ export default async function handler(req, res) {
   };
 
   try {
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=6&date=${yyyy}-${mm}-${dd}&gameType=R&hydrate=linescore,boxscore`;
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=6&date=${yyyy}-${mm}-${dd}&gameType=R&hydrate=linescore,boxscore,decisions`;
     const r = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
@@ -84,6 +84,8 @@ export default async function handler(req, res) {
         awayInnings,
         homeInnings,
         inning: ls.currentInning || null,
+        winPitcher: g.decisions?.winner?.fullName || null,
+        losePitcher: g.decisions?.loser?.fullName || null,
         gameId: String(g.gamePk || ''),
       };
     });
