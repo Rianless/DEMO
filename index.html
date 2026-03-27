@@ -844,7 +844,7 @@ function renderContent(d) {
   else el.innerHTML=renderCal(d);
 }
 
-function renderCal(d) {
+function renderCalSplit(d) {
   const {yr,mo,sel}=state;
   const WDAYS=['일','월','화','수','목','금','토'];
   const f=fdow(yr,mo), days=dim(yr,mo);
@@ -966,7 +966,7 @@ function renderCal(d) {
     </div>`;
   }
 
-  return `
+  const calHtml = `
     ${(()=>{
       const dday = getDday();
       const isDday = dday === 'D-Day';
@@ -994,20 +994,26 @@ function renderCal(d) {
       </div>
       <button onclick="goToday()" style="font-size:11px;font-weight:700;color:#E31837;border:1.5px solid #E31837;border-radius:8px;padding:4px 10px;white-space:nowrap">오늘</button>
     </div>
-    <div id="cal-wrap" style="position:sticky;top:0;z-index:10;background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
+    <div id="cal-wrap" style="background:${d.bg};border:1px solid ${d.bgB};border-radius:14px;overflow:hidden;margin-bottom:16px">
       <div class="cal-grid" style="border-bottom:1px solid ${d.bgB};background:${d.bg}">
         ${WDAYS.map((w,i)=>`<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:${i===0?'#EF5350':i===6?'#4FC3F7':d.sub}">${w}</div>`).join('')}
       </div>
       <div class="cal-grid" id="cal-grid-body">${cells}</div>
-    </div>
-    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+    </div>`;
+  const listHtml = `<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px;padding-top:8px">
       <div style="font-size:14px;font-weight:900;color:${d.text}">${sm}월 ${sd}일 (${dw})</div>
       <span style="font-size:11px;color:${d.sub}">· ${selGs.length>0?selGs.length+'경기':'경기 없음'}</span>
     </div>
     ${gameList}`;
+  return {calHtml, listHtml};
 }
 
 
+
+function renderCal(d) {
+  const {calHtml, listHtml} = renderCalSplit(d);
+  return calHtml + listHtml;
+}
 
 function renderBaseballRecord(d) {
   // KIA 경기 중 FINAL인 것만 (순서: 최신순)
@@ -1628,7 +1634,6 @@ function setTab(t){
   state.tab=t;
   render();
   window.scrollTo({top:0,behavior:'instant'});
-  document.getElementById('content').scrollTop=0;
 }
 function setLcat(c){state.lcat=c;render();}
 function goToday(){
@@ -1684,32 +1689,7 @@ window.addEventListener('popstate',()=>{if(state.modalGame)closeModal();});
 
 setInterval(()=>{state.clock=new Date();render();},1000);
 
-// ── 달력 스크롤 주간 전환 ──
-(function(){
-  let calCollapsed = false;
-  window.addEventListener('scroll', function() {
-    const wrap = document.getElementById('cal-wrap');
-    const grid = document.getElementById('cal-grid-body');
-    if(!wrap || !grid) return;
-    const scrollY = window.scrollY;
-    if(scrollY > 80 && !calCollapsed) {
-      calCollapsed = true;
-      // 현재 주만 보이게 - 나머지 행 숨기기
-      const cells = grid.querySelectorAll('.cal-cell');
-      cells.forEach(cell => {
-        if(!cell.classList.contains('current-week')) {
-          cell.style.display = 'none';
-        }
-      });
-      wrap.style.borderRadius = '0 0 14px 14px';
-    } else if(scrollY <= 20 && calCollapsed) {
-      calCollapsed = false;
-      const cells = grid.querySelectorAll('.cal-cell');
-      cells.forEach(cell => { cell.style.display = ''; });
-      wrap.style.borderRadius = '14px';
-    }
-  }, {passive:true});
-})();
+
 
 // ── 탭 스와이프 ──
 (function(){
