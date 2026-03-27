@@ -13,33 +13,32 @@ export default async function handler(req, res) {
     '두산': '두산', '롯데': '롯데', '삼성': '삼성', '한화': '한화', '키움': '키움',
     'Tigers': 'KIA', 'Wiz': 'KT', 'Twins': 'LG', 'Landers': 'SSG', 'Dinos': 'NC',
     'Bears': '두산', 'Giants': '롯데', 'Lions': '삼성', 'Eagles': '한화', 'Heroes': '키움',
-    'HH': '한화', 'LT': '롯데', 'SS': '삼성', 'HB': '두산', 'KI': '키움',
-    'OB': '두산', 'WO': '키움',
   };
   const mapTeam = name => {
     if (!name) return name;
     for (const [k, v] of Object.entries(TEAM_MAP)) {
-      if (name === k || name.includes(k)) return v;
+      if (name.includes(k)) return v;
     }
     return name;
   };
 
   try {
-    // KBO 공식 API (스포츠플래시 기반)
-    const url = `https://www.koreabaseball.com/ws/Schedule.asmx/GetScheduleList?leagueId=1&seriesId=0&gameDate=${dateStr}&teamId=0`;
+    // KBO 공식 API - 올바른 파라미터
+    const url = `https://www.koreabaseball.com/ws/Schedule.asmx/GetScheduleList?leId=1&srId=0,9&date=${dateStr}`;
 
     const r = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
         'Accept': 'application/json, text/javascript, */*',
-        'Referer': 'https://www.koreabaseball.com/',
+        'Referer': 'https://www.koreabaseball.com/Schedule/Schedule.aspx',
+        'Content-Type': 'application/json; charset=utf-8',
       }
     });
 
     const text = await r.text();
 
     if (!r.ok) {
-      return res.status(200).json({ games: [], date: dateStr, error: `KBO HTTP ${r.status}`, raw: text.substring(0, 300) });
+      return res.status(200).json({ games: [], date: dateStr, error: `HTTP ${r.status}`, raw: text.substring(0, 300) });
     }
 
     let data;
@@ -48,28 +47,34 @@ export default async function handler(req, res) {
       return res.status(200).json({ games: [], date: dateStr, error: 'JSON 파싱 실패', raw: text.substring(0, 300) });
     }
 
-    // KBO 공식 사이트 응답 파싱
-    const rawGames = data?.d || data?.result || data?.games || data || [];
-    const list = Array.isArray(rawGames) ? rawGames : [];
+    // d 필드 안에 배열
+    const list = data?.d || [];
 
     const games = list.map(g => {
-      const sc = String(g.StatusCode || g.status || g.GameStatus || '');
+      const sc = String(g.GameStatus || g.StatusCode || '');
       let status = 'SCHEDULED';
-      if (['1', 'P', 'playing', 'LIVE'].includes(sc)) status = 'LIVE';
-      else if (['2', 'F', 'done', 'RESULT', 'result'].includes(sc)) status = 'FINAL';
+      if (sc === 'P' || sc === '1') status = 'LIVE';
+      else if (sc === 'F' || sc === '2') status = 'FINAL';
+
+      // 이닝별 스코어 파싱
+      const parseInnings = str => {
+        if (!str) return Array(9).fill(-1);
+        return str.split('|').map(n => n === '' ? -1 : Number(n));
+      };
 
       return {
         date: `${yyyy}-${mm}-${dd}`,
-        time: (g.GameTime || g.time || g.StartTime || '').substring(0, 5),
-        away: mapTeam(g.AwayTeamName || g.awayTeam || g.Away || ''),
-        home: mapTeam(g.HomeTeamName || g.homeTeam || g.Home || ''),
-        stad: g.StadiumName || g.stadium || g.Venue || '',
+        time: (g.StartTime || g.GameTime || '').substring(0, 5),
+        away: mapTeam(g.AwayTeamName || ''),
+        home: mapTeam(g.HomeTeamName || ''),
+        stad: g.StadiumName || '',
         status,
-        awayScore: g.AwayScore ?? g.awayScore ?? null,
-        homeScore: g.HomeScore ?? g.homeScore ?? null,
-        awayInnings: Array(9).fill(-1),
-        homeInnings: Array(9).fill(-1),
-        gameId: g.GameId || g.gameId || '',
+        awayScore: g.AwayScore != null ? Number(g.AwayScore) : null,
+        homeScore: g.HomeScore != null ? Number(g.HomeScore) : null,
+        awayInnings: parseInnings(g.AwayScoreStr),
+        homeInnings: parseInnings(g.HomeScoreStr),
+        inning: g.CurrentInning || null,
+        gameId: g.GameId || '',
       };
     });
 
