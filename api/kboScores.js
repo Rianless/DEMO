@@ -19,71 +19,62 @@ export default async function handler(req, res) {
     return name;
   };
 
-  // 여러 URL 순서대로 시도
-  const urls = [
-    `https://api-gw.sports.naver.com/schedule/games?fields=basic,schedule,baseball&upperCategoryId=kbaseball&categoryIds=kbo&fromDate=${dateStr}&toDate=${dateStr}&size=100`,
-    `https://m.sports.naver.com/ajax/schedule/list.nhn?upperCategoryId=kbaseball&categoryId=kbo&date=${dateStr}`,
-  ];
+  try {
+    // fields 쉼표를 %2C로 인코딩
+    const apiUrl = `https://api-gw.sports.naver.com/schedule/games?fields=basic%2Cschedule%2Cbaseball&upperCategoryId=kbaseball&categoryIds=kbo&fromDate=${dateStr}&toDate=${dateStr}&size=100`;
 
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-    'Referer': 'https://m.sports.naver.com/',
-    'Origin': 'https://m.sports.naver.com',
-    'Accept': 'application/json',
-    'Accept-Language': 'ko-KR,ko;q=0.9',
-  };
+    const r = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
+        'Referer': 'https://m.sports.naver.com/kbaseball/schedule/index',
+        'Origin': 'https://m.sports.naver.com',
+        'Accept': 'application/json',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      }
+    });
 
-  let lastError = '';
-  let debugInfo = [];
+    const text = await r.text();
 
-  for (const url of urls) {
-    try {
-      const r = await fetch(url, { headers });
-      const text = await r.text();
-      debugInfo.push({ url, status: r.status, preview: text.substring(0, 150) });
-
-      if (!r.ok) { lastError = `HTTP ${r.status}`; continue; }
-
-      let data;
-      try { data = JSON.parse(text); } catch(e) { lastError = 'JSON 파싱 실패'; continue; }
-
-      const rawGames = data?.result?.games || data?.games || data?.list || [];
-      if (!rawGames.length) { lastError = '경기 없음'; continue; }
-
-      const games = rawGames.map(g => {
-        const base = g.schedule || g;
-        const baseball = g.baseball || {};
-        const awayTeam = mapTeam(base.awayTeamName || base.awayTeam);
-        const homeTeam = mapTeam(base.homeTeamName || base.homeTeam);
-        const sc = String(base.statusCode || base.gameStatusCode || base.status || '');
-        let status = 'SCHEDULED';
-        if (['1','LIVE','playing'].includes(sc)) status = 'LIVE';
-        else if (['2','RESULT','result','done'].includes(sc)) status = 'FINAL';
-        const ai = baseball.awayScoreList || [];
-        const hi = baseball.homeScoreList || [];
-        return {
-          date: dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-          time: (base.gameTime || '').substring(0, 5),
-          away: awayTeam, home: homeTeam,
-          stad: base.stadiumName || base.stadium || '',
-          status,
-          awayScore: base.awayScore ?? null,
-          homeScore: base.homeScore ?? null,
-          awayInnings: ai.length ? ai.map(Number) : Array(9).fill(-1),
-          homeInnings: hi.length ? hi.map(Number) : Array(9).fill(-1),
-          inning: baseball.currentInning || null,
-          gameId: base.gameId || base.id || '',
-        };
-      });
-
-      return res.status(200).json({ games, date: dateStr, total: games.length });
-
-    } catch(e) {
-      lastError = e.message;
-      debugInfo.push({ url, error: e.message });
+    if (!r.ok) {
+      return res.status(200).json({ games: [], date: dateStr, error: `HTTP ${r.status}`, raw: text.substring(0, 200) });
     }
-  }
 
-  // 모두 실패 시 디버그 정보 포함
-  res.status(200).json({ games: [], date: dateStr, error: lastError, debug: debugInfo });
+    let data;
+    try { data = JSON.parse(text); }
+    catch(e) {
+      return res.status(200).json({ games: [], date: dateStr, error: 'JSON 파싱 실패', raw: text.substring(0, 200) });
+    }
+
+    const rawGames = data?.result?.games || [];
+
+    const games = rawGames.map(g => {
+      const base = g.schedule || g;
+      const baseball = g.baseball || {};
+      const sc = String(base.statusCode || base.gameStatusCode || '');
+      let status = 'SCHEDULED';
+      if (['1', 'LIVE'].includes(sc)) status = 'LIVE';
+      else if (['2', 'RESULT'].includes(sc)) status = 'FINAL';
+      const ai = baseball.awayScoreList || [];
+      const hi = baseball.homeScoreList || [];
+      return {
+        date: dateStr.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
+        time: (base.gameTime || '').substring(0, 5),
+        away: mapTeam(base.awayTeamName || base.awayTeam),
+        home: mapTeam(base.homeTeamName || base.homeTeam),
+        stad: base.stadiumName || '',
+        status,
+        awayScore: base.awayScore ?? null,
+        homeScore: base.homeScore ?? null,
+        awayInnings: ai.length ? ai.map(Number) : Array(9).fill(-1),
+        homeInnings: hi.length ? hi.map(Number) : Array(9).fill(-1),
+        inning: baseball.currentInning || null,
+        gameId: base.gameId || '',
+      };
+    });
+
+    res.status(200).json({ games, date: dateStr, total: games.length });
+
+  } catch(e) {
+    res.status(200).json({ games: [], date: dateStr, error: e.message });
+  }
 }
